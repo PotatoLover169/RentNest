@@ -61,6 +61,9 @@ INSTALLED_APPS = [
     # Third-party
     "corsheaders",
     "rest_framework",
+
+    # RentNest
+    "apps.accounts",
 ]
 
 
@@ -170,6 +173,13 @@ AUTH_PASSWORD_VALIDATORS = [
         ),
     },
 ]
+
+
+# ============================================================
+# CUSTOM USER MODEL
+# ============================================================
+
+AUTH_USER_MODEL = "accounts.User"
 
 
 # ============================================================
