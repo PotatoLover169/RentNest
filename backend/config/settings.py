@@ -65,6 +65,7 @@ INSTALLED_APPS = [
 
     # RentNest
     "apps.accounts",
+    "apps.properties",
 ]
 
 
