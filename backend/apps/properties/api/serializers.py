@@ -7,8 +7,8 @@ class UnitSerializer(serializers.ModelSerializer):
     """
     Serializer for rental units.
 
-    Property ownership is intentionally not writable through
-    the API. The service layer determines the property.
+    Property ownership is assigned by the backend and cannot
+    be changed through client input.
     """
 
     property = serializers.PrimaryKeyRelatedField(
@@ -69,8 +69,8 @@ class PropertySerializer(serializers.ModelSerializer):
     """
     Main serializer for rental properties.
 
-    The manager is never accepted from client input.
-    Ownership is assigned by the authenticated backend user.
+    The manager is assigned by the backend and cannot be
+    supplied or changed through client input.
     """
 
     manager = serializers.PrimaryKeyRelatedField(
@@ -102,6 +102,7 @@ class PropertySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
 
 class PropertyDetailSerializer(PropertySerializer):
     """

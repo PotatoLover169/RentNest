@@ -144,6 +144,9 @@ class PropertyAPITests(APITestCase):
             format="json",
         )
 
+        print("CREATE PROPERTY STATUS:", response.status_code)
+        print("CREATE PROPERTY DATA:", response.data)
+
         self.assertEqual(
             response.status_code,
             status.HTTP_201_CREATED,

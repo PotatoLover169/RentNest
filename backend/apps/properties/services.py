@@ -57,6 +57,7 @@ class PropertyService:
         property_instance,
     ):
         property_instance.status = PropertyStatus.INACTIVE
+
         property_instance.save(
             update_fields=[
                 "status",
