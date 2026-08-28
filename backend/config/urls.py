@@ -30,4 +30,9 @@ urlpatterns = [
         "api/properties/",
         include("apps.properties.api.urls"),
     ),
+
+    path(
+        "api/tenancies/",
+        include("apps.tenancies.api.urls"),
+    ),
 ]
