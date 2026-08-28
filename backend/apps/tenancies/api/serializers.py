@@ -45,6 +45,10 @@ class TenancySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    # ============================================================
+    # FIELD VALIDATION
+    # ============================================================
+
     def validate_monthly_rent(self, value):
         if value < 0:
             raise serializers.ValidationError(
@@ -61,15 +65,48 @@ class TenancySerializer(serializers.ModelSerializer):
 
         return value
 
+    # ============================================================
+    # OBJECT VALIDATION
+    # ============================================================
+
     def validate(self, attrs):
+        # --------------------------------------------------------
+        # Status must never be changed through PUT/PATCH.
+        #
+        # Because status is read_only, DRF removes it from
+        # validated_data. Therefore we check initial_data instead.
+        # --------------------------------------------------------
+
+        if self.instance and "status" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "status": (
+                        "Tenancy status must be changed through "
+                        "the appropriate workflow endpoint."
+                    )
+                }
+            )
+
+        # --------------------------------------------------------
+        # Validate date range
+        # --------------------------------------------------------
+
         start_date = attrs.get(
             "start_date",
-            getattr(self.instance, "start_date", None),
+            getattr(
+                self.instance,
+                "start_date",
+                None,
+            ),
         )
 
         end_date = attrs.get(
             "end_date",
-            getattr(self.instance, "end_date", None),
+            getattr(
+                self.instance,
+                "end_date",
+                None,
+            ),
         )
 
         if (

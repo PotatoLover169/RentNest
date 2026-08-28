@@ -8,6 +8,10 @@ from .models import Tenancy, TenancyStatus
 
 class TenancyService:
 
+    # ============================================================
+    # CREATE TENANCY
+    # ============================================================
+
     @staticmethod
     @transaction.atomic
     def create_tenancy(
@@ -24,16 +28,24 @@ class TenancyService:
         """
         Create a tenancy.
 
-        If the tenancy is created as ACTIVE:
-        - The unit must not already have another ACTIVE tenancy.
-        - The unit must be AVAILABLE.
-        - The unit becomes OCCUPIED.
+        Business rules:
+        - A unit cannot have multiple ACTIVE tenancies.
+        - An ACTIVE tenancy requires an AVAILABLE unit.
+        - Creating an ACTIVE tenancy makes the unit OCCUPIED.
         """
+
+        # --------------------------------------------------------
+        # ACTIVE tenancy validation
+        # --------------------------------------------------------
 
         if status == TenancyStatus.ACTIVE:
             TenancyService._ensure_unit_can_be_activated(
                 unit=unit,
             )
+
+        # --------------------------------------------------------
+        # Create tenancy
+        # --------------------------------------------------------
 
         tenancy = Tenancy.objects.create(
             tenant=tenant,
@@ -46,8 +58,13 @@ class TenancyService:
             notes=notes,
         )
 
+        # --------------------------------------------------------
+        # ACTIVE tenancy occupies the unit
+        # --------------------------------------------------------
+
         if status == TenancyStatus.ACTIVE:
             unit.status = UnitStatus.OCCUPIED
+
             unit.save(
                 update_fields=[
                     "status",
@@ -56,6 +73,10 @@ class TenancyService:
             )
 
         return tenancy
+
+    # ============================================================
+    # ACTIVATE TENANCY
+    # ============================================================
 
     @staticmethod
     @transaction.atomic
@@ -78,8 +99,14 @@ class TenancyService:
             Tenancy.objects
             .select_for_update()
             .select_related("unit")
-            .get(pk=tenancy_instance.pk)
+            .get(
+                pk=tenancy_instance.pk,
+            )
         )
+
+        # --------------------------------------------------------
+        # Validate tenancy status
+        # --------------------------------------------------------
 
         if tenancy.status == TenancyStatus.ACTIVE:
             raise ValidationError(
@@ -91,14 +118,32 @@ class TenancyService:
                 "An ended tenancy cannot be activated."
             )
 
+        # --------------------------------------------------------
+        # Lock the unit
+        # --------------------------------------------------------
+
         unit = Unit.objects.select_for_update().get(
             pk=tenancy.unit_id,
         )
+
+        # --------------------------------------------------------
+        # Validate unit
+        # --------------------------------------------------------
 
         TenancyService._ensure_unit_can_be_activated(
             unit=unit,
             exclude_tenancy=tenancy,
         )
+
+        if unit.status != UnitStatus.AVAILABLE:
+            raise ValidationError(
+                "Only an available unit can be activated "
+                "for a tenancy."
+            )
+
+        # --------------------------------------------------------
+        # Activate tenancy
+        # --------------------------------------------------------
 
         tenancy.status = TenancyStatus.ACTIVE
 
@@ -108,6 +153,10 @@ class TenancyService:
                 "updated_at",
             ]
         )
+
+        # --------------------------------------------------------
+        # Occupy unit
+        # --------------------------------------------------------
 
         unit.status = UnitStatus.OCCUPIED
 
@@ -120,6 +169,10 @@ class TenancyService:
 
         return tenancy
 
+    # ============================================================
+    # END TENANCY
+    # ============================================================
+
     @staticmethod
     @transaction.atomic
     def end_tenancy(
@@ -130,29 +183,52 @@ class TenancyService:
         """
         End an active tenancy.
 
-        The tenancy becomes ENDED and the unit becomes AVAILABLE.
+        Rules:
+        - Only ACTIVE tenancies can be ended.
+        - End date cannot be before start date.
+        - The tenancy becomes ENDED.
+        - The unit becomes AVAILABLE.
         """
 
         tenancy = (
             Tenancy.objects
             .select_for_update()
             .select_related("unit")
-            .get(pk=tenancy_instance.pk)
+            .get(
+                pk=tenancy_instance.pk,
+            )
         )
+
+        # --------------------------------------------------------
+        # Validate tenancy status
+        # --------------------------------------------------------
 
         if tenancy.status != TenancyStatus.ACTIVE:
             raise ValidationError(
                 "Only an active tenancy can be ended."
             )
 
+        # --------------------------------------------------------
+        # Validate end date
+        # --------------------------------------------------------
+
         if end_date < tenancy.start_date:
             raise ValidationError(
-                "End date cannot be before the tenancy start date."
+                "End date cannot be before the tenancy "
+                "start date."
             )
+
+        # --------------------------------------------------------
+        # Lock unit
+        # --------------------------------------------------------
 
         unit = Unit.objects.select_for_update().get(
             pk=tenancy.unit_id,
         )
+
+        # --------------------------------------------------------
+        # End tenancy
+        # --------------------------------------------------------
 
         tenancy.status = TenancyStatus.ENDED
         tenancy.end_date = end_date
@@ -165,6 +241,10 @@ class TenancyService:
             ]
         )
 
+        # --------------------------------------------------------
+        # Make unit available again
+        # --------------------------------------------------------
+
         unit.status = UnitStatus.AVAILABLE
 
         unit.save(
@@ -176,6 +256,10 @@ class TenancyService:
 
         return tenancy
 
+    # ============================================================
+    # PRIVATE VALIDATION
+    # ============================================================
+
     @staticmethod
     def _ensure_unit_can_be_activated(
         *,
@@ -185,9 +269,9 @@ class TenancyService:
         """
         Validate that a unit can receive an ACTIVE tenancy.
 
-        This is a domain-level rule rather than a database
-        constraint because MySQL does not support the
-        conditional unique constraint used by the model.
+        This validation intentionally lives in the service layer
+        because MySQL does not support the conditional unique
+        constraint used to represent this business rule.
         """
 
         active_tenancies = Tenancy.objects.filter(
@@ -195,17 +279,30 @@ class TenancyService:
             status=TenancyStatus.ACTIVE,
         )
 
+        # --------------------------------------------------------
+        # Exclude the current tenancy when activating it
+        # --------------------------------------------------------
+
         if exclude_tenancy is not None:
             active_tenancies = active_tenancies.exclude(
                 pk=exclude_tenancy.pk,
             )
+
+        # --------------------------------------------------------
+        # Prevent multiple ACTIVE tenancies
+        # --------------------------------------------------------
 
         if active_tenancies.exists():
             raise ValidationError(
                 "This unit already has an active tenancy."
             )
 
+        # --------------------------------------------------------
+        # Unit must be available
+        # --------------------------------------------------------
+
         if unit.status != UnitStatus.AVAILABLE:
             raise ValidationError(
-                "Only an available unit can have an active tenancy."
+                "Only an available unit can have "
+                "an active tenancy."
             )

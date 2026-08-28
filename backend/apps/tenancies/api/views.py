@@ -1,12 +1,18 @@
 from datetime import date
 
+from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 
-from rest_framework import generics, permissions, serializers
+from rest_framework import (
+    generics,
+    permissions,
+    serializers,
+    status,
+)
 from rest_framework.response import Response
 
-from apps.accounts.models import UserRole
+from apps.accounts.models import User, UserRole
 from apps.properties.models import PropertyStatus, Unit
 from apps.properties.permissions import IsPropertyManager
 
@@ -49,13 +55,25 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             "unit__property__manager",
         )
 
+        # --------------------------------------------------------
+        # Staff
+        # --------------------------------------------------------
+
         if user.is_staff:
             return queryset
+
+        # --------------------------------------------------------
+        # Property manager
+        # --------------------------------------------------------
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
+
+        # --------------------------------------------------------
+        # Tenant
+        # --------------------------------------------------------
 
         if user.role == UserRole.TENANT:
             return queryset.filter(
@@ -68,19 +86,38 @@ class TenancyListCreateView(generics.ListCreateAPIView):
         unit_id = self.request.data.get("unit")
         tenant_id = self.request.data.get("tenant")
 
+        # --------------------------------------------------------
+        # Validate unit ID
+        # --------------------------------------------------------
+
         if not unit_id:
             raise serializers.ValidationError(
                 {
-                    "unit": "Unit is required when creating a tenancy."
+                    "unit": (
+                        "Unit is required when creating "
+                        "a tenancy."
+                    )
                 }
             )
+
+        # --------------------------------------------------------
+        # Validate tenant ID
+        # --------------------------------------------------------
 
         if not tenant_id:
             raise serializers.ValidationError(
                 {
-                    "tenant": "Tenant is required when creating a tenancy."
+                    "tenant": (
+                        "Tenant is required when creating "
+                        "a tenancy."
+                    )
                 }
             )
+
+        # --------------------------------------------------------
+        # Property manager can only use their own active
+        # properties.
+        # --------------------------------------------------------
 
         unit = get_object_or_404(
             Unit.objects.select_related(
@@ -92,7 +129,9 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             pk=unit_id,
         )
 
-        from apps.accounts.models import User
+        # --------------------------------------------------------
+        # Tenant must actually have TENANT role.
+        # --------------------------------------------------------
 
         tenant = get_object_or_404(
             User.objects.filter(
@@ -101,6 +140,10 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             ),
             pk=tenant_id,
         )
+
+        # --------------------------------------------------------
+        # Creation goes through the service layer.
+        # --------------------------------------------------------
 
         TenancyService.create_tenancy(
             tenant=tenant,
@@ -122,12 +165,18 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
     to units they manage.
 
     Tenants can view their own tenancies.
+
+    Tenancy status cannot be changed through PUT/PATCH.
+    Status changes must use the workflow endpoints.
     """
 
     serializer_class = TenancySerializer
 
     def get_permissions(self):
-        if self.request.method in ("PUT", "PATCH"):
+        if self.request.method in (
+            "PUT",
+            "PATCH",
+        ):
             return [
                 IsPropertyManager(),
             ]
@@ -146,13 +195,25 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
             "unit__property__manager",
         )
 
+        # --------------------------------------------------------
+        # Staff
+        # --------------------------------------------------------
+
         if user.is_staff:
             return queryset
+
+        # --------------------------------------------------------
+        # Property manager
+        # --------------------------------------------------------
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
+
+        # --------------------------------------------------------
+        # Tenant
+        # --------------------------------------------------------
 
         if user.role == UserRole.TENANT:
             return queryset.filter(
@@ -164,7 +225,10 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         tenancy = self.get_object()
 
-        # Status changes must go through the service workflow.
+        # --------------------------------------------------------
+        # Status changes must go through service workflows.
+        # --------------------------------------------------------
+
         if "status" in serializer.validated_data:
             raise serializers.ValidationError(
                 {
@@ -174,6 +238,10 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
                     )
                 }
             )
+
+        # --------------------------------------------------------
+        # Update non-status fields.
+        # --------------------------------------------------------
 
         Tenancy.objects.filter(
             pk=tenancy.pk,
@@ -217,13 +285,25 @@ class TenancyActivateView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         tenancy = self.get_object()
 
-        tenancy = TenancyService.activate_tenancy(
-            tenancy_instance=tenancy,
-        )
+        # --------------------------------------------------------
+        # Run activation through service workflow.
+        # --------------------------------------------------------
+
+        try:
+            tenancy = TenancyService.activate_tenancy(
+                tenancy_instance=tenancy,
+            )
+
+        except ValidationError as exc:
+            raise serializers.ValidationError(
+                {
+                    "detail": exc.messages,
+                }
+            )
 
         return Response(
             TenancySerializer(tenancy).data,
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
@@ -262,6 +342,10 @@ class TenancyEndView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         tenancy = self.get_object()
 
+        # --------------------------------------------------------
+        # End date is required.
+        # --------------------------------------------------------
+
         end_date = request.data.get("end_date")
 
         if not end_date:
@@ -271,23 +355,43 @@ class TenancyEndView(generics.GenericAPIView):
                 }
             )
 
+        # --------------------------------------------------------
+        # Parse date.
+        # --------------------------------------------------------
+
         try:
-            parsed_end_date = date.fromisoformat(end_date)
+            parsed_end_date = date.fromisoformat(
+                end_date,
+            )
+
         except (TypeError, ValueError):
             raise serializers.ValidationError(
                 {
                     "end_date": (
-                        "Enter a valid date in YYYY-MM-DD format."
+                        "Enter a valid date in "
+                        "YYYY-MM-DD format."
                     )
                 }
             )
 
-        tenancy = TenancyService.end_tenancy(
-            tenancy_instance=tenancy,
-            end_date=parsed_end_date,
-        )
+        # --------------------------------------------------------
+        # Run ending workflow through service.
+        # --------------------------------------------------------
+
+        try:
+            tenancy = TenancyService.end_tenancy(
+                tenancy_instance=tenancy,
+                end_date=parsed_end_date,
+            )
+
+        except ValidationError as exc:
+            raise serializers.ValidationError(
+                {
+                    "detail": exc.messages,
+                }
+            )
 
         return Response(
             TenancySerializer(tenancy).data,
-            status=200,
+            status=status.HTTP_200_OK,
         )
