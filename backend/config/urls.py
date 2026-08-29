@@ -40,4 +40,10 @@ urlpatterns = [
         "api/maintenance/",
         include("apps.maintenance.api.urls"),
     ),
+
+    path(
+        "api/payments/",
+        include("apps.payments.api.urls"),
+    ),
+    
 ]
