@@ -35,4 +35,9 @@ urlpatterns = [
         "api/tenancies/",
         include("apps.tenancies.api.urls"),
     ),
+
+    path(
+        "api/maintenance/",
+        include("apps.maintenance.api.urls"),
+    ),
 ]
