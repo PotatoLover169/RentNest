@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "apps.properties",
     "apps.tenancies",
     "apps.maintenance",
+    "apps.payments",
 ]
 
 
