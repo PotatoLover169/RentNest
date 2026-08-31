@@ -4,12 +4,11 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 
 from rest_framework import generics, permissions, serializers, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.accounts.models import User, UserRole
-from apps.properties.models import PropertyStatus, Unit
-from apps.properties.permissions import IsPropertyManager
-
+from apps.properties.models import PropertyStatus
 from apps.tenancies.models import Tenancy
 
 from apps.payments.models import Payment
@@ -25,21 +24,10 @@ from .serializers import PaymentSerializer
 
 class PaymentListCreateView(generics.ListCreateAPIView):
     """
-    List accessible payments and create payments for
-    tenancies managed by the authenticated property manager.
+    List and create rental payments.
     """
 
     serializer_class = PaymentSerializer
-
-    def get_permissions(self):
-        if self.request.method == "POST":
-            return [
-                IsPropertyManager(),
-            ]
-
-        return [
-            permissions.IsAuthenticated(),
-        ]
 
     def get_queryset(self):
         user = self.request.user
@@ -68,6 +56,13 @@ class PaymentListCreateView(generics.ListCreateAPIView):
         return queryset.none()
 
     def perform_create(self, serializer):
+        user = self.request.user
+
+        if user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can create payments."
+            )
+
         tenancy_id = self.request.data.get("tenancy")
         tenant_id = self.request.data.get("tenant")
 
@@ -95,7 +90,7 @@ class PaymentListCreateView(generics.ListCreateAPIView):
                 "unit",
                 "unit__property",
             ).filter(
-                unit__property__manager=self.request.user,
+                unit__property__manager=user,
                 unit__property__status=PropertyStatus.ACTIVE,
             ),
             pk=tenancy_id,
@@ -105,22 +100,21 @@ class PaymentListCreateView(generics.ListCreateAPIView):
             User.objects.filter(
                 pk=tenant_id,
                 role=UserRole.TENANT,
-            ),
-            pk=tenant_id,
+            )
         )
 
         if tenancy.tenant_id != tenant.id:
             raise serializers.ValidationError(
                 {
                     "tenant": (
-                        "The selected tenant does not belong "
-                        "to this tenancy."
+                        "This tenancy does not belong to "
+                        "the specified tenant."
                     )
                 }
             )
 
         try:
-            PaymentService.create_payment(
+            payment = PaymentService.create_payment(
                 tenancy=tenancy,
                 tenant=tenant,
                 **serializer.validated_data,
@@ -132,6 +126,8 @@ class PaymentListCreateView(generics.ListCreateAPIView):
                 }
             )
 
+        serializer.instance = payment
+
 
 # ============================================================
 # PAYMENT DETAIL
@@ -141,27 +137,9 @@ class PaymentListCreateView(generics.ListCreateAPIView):
 class PaymentDetailView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a payment.
-
-    Property managers can modify payments belonging to
-    units they manage.
-
-    Tenants can view their own payments.
-
-    Payment status cannot be changed through PATCH/PUT.
-    Status changes must use the dedicated workflow endpoints.
     """
 
     serializer_class = PaymentSerializer
-
-    def get_permissions(self):
-        if self.request.method in ("PUT", "PATCH"):
-            return [
-                IsPropertyManager(),
-            ]
-
-        return [
-            permissions.IsAuthenticated(),
-        ]
 
     def get_queryset(self):
         user = self.request.user
@@ -189,59 +167,52 @@ class PaymentDetailView(generics.RetrieveUpdateAPIView):
 
         return queryset.none()
 
-    def perform_update(self, serializer):
-        payment = self.get_object()
+    def update(self, request, *args, **kwargs):
+        if request.user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can update payments."
+            )
 
-        if "status" in serializer.validated_data:
+        protected_fields = {
+            "status",
+            "tenant",
+            "tenancy",
+        }
+
+        attempted_protected_fields = (
+            protected_fields
+            & set(request.data.keys())
+        )
+
+        if attempted_protected_fields:
             raise serializers.ValidationError(
                 {
-                    "status": (
-                        "Payment status must be changed through "
-                        "the appropriate workflow endpoint."
+                    field: (
+                        "This field cannot be changed directly. "
+                        "Use the appropriate payment workflow endpoint."
                     )
+                    for field in attempted_protected_fields
                 }
             )
 
-        if "tenant" in serializer.validated_data:
-            raise serializers.ValidationError(
-                {
-                    "tenant": (
-                        "Payment tenant cannot be changed."
-                    )
-                }
-            )
-
-        if "tenancy" in serializer.validated_data:
-            raise serializers.ValidationError(
-                {
-                    "tenancy": (
-                        "Payment tenancy cannot be changed."
-                    )
-                }
-            )
-
-        serializer.save()
+        return super().update(request, *args, **kwargs)
 
 
 # ============================================================
-# PAYMENT MARK PAID
+# MARK PAYMENT AS PAID
 # ============================================================
 
 
 class PaymentMarkPaidView(generics.GenericAPIView):
-    """
-    Mark a pending payment as PAID.
-    """
 
     permission_classes = [
-        IsPropertyManager,
+        permissions.IsAuthenticated,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
         return Payment.objects.select_related(
-            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
@@ -256,23 +227,24 @@ class PaymentMarkPaidView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
+        if request.user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can update payment status."
+            )
+
         payment = self.get_object()
 
         payment_date = request.data.get("payment_date")
         reference_number = request.data.get("reference_number")
 
-        parsed_payment_date = None
-
         if payment_date:
             try:
-                parsed_payment_date = date.fromisoformat(
-                    payment_date,
-                )
-            except (TypeError, ValueError):
+                payment_date = date.fromisoformat(payment_date)
+            except ValueError:
                 raise serializers.ValidationError(
                     {
                         "payment_date": (
-                            "Enter a valid date in YYYY-MM-DD format."
+                            "Payment date must use YYYY-MM-DD format."
                         )
                     }
                 )
@@ -280,7 +252,7 @@ class PaymentMarkPaidView(generics.GenericAPIView):
         try:
             payment = PaymentService.mark_paid(
                 payment_instance=payment,
-                payment_date=parsed_payment_date,
+                payment_date=payment_date,
                 reference_number=reference_number,
             )
         except ValidationError as exc:
@@ -297,24 +269,20 @@ class PaymentMarkPaidView(generics.GenericAPIView):
 
 
 # ============================================================
-# PAYMENT MARK FAILED
+# MARK PAYMENT AS FAILED
 # ============================================================
 
 
 class PaymentMarkFailedView(generics.GenericAPIView):
-    """
-    Mark a pending payment as FAILED.
-    """
 
     permission_classes = [
-        IsPropertyManager,
+        permissions.IsAuthenticated,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
         return Payment.objects.select_related(
-            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
@@ -329,14 +297,17 @@ class PaymentMarkFailedView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        payment = self.get_object()
+        if request.user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can update payment status."
+            )
 
-        notes = request.data.get("notes")
+        payment = self.get_object()
 
         try:
             payment = PaymentService.mark_failed(
                 payment_instance=payment,
-                notes=notes,
+                notes=request.data.get("notes"),
             )
         except ValidationError as exc:
             raise serializers.ValidationError(
@@ -352,24 +323,20 @@ class PaymentMarkFailedView(generics.GenericAPIView):
 
 
 # ============================================================
-# PAYMENT REFUND
+# REFUND PAYMENT
 # ============================================================
 
 
 class PaymentRefundView(generics.GenericAPIView):
-    """
-    Refund a paid payment.
-    """
 
     permission_classes = [
-        IsPropertyManager,
+        permissions.IsAuthenticated,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
         return Payment.objects.select_related(
-            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
@@ -384,14 +351,17 @@ class PaymentRefundView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        payment = self.get_object()
+        if request.user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can update payment status."
+            )
 
-        notes = request.data.get("notes")
+        payment = self.get_object()
 
         try:
             payment = PaymentService.refund_payment(
                 payment_instance=payment,
-                notes=notes,
+                notes=request.data.get("notes"),
             )
         except ValidationError as exc:
             raise serializers.ValidationError(
@@ -407,24 +377,20 @@ class PaymentRefundView(generics.GenericAPIView):
 
 
 # ============================================================
-# PAYMENT CANCEL
+# CANCEL PAYMENT
 # ============================================================
 
 
 class PaymentCancelView(generics.GenericAPIView):
-    """
-    Cancel a pending payment.
-    """
 
     permission_classes = [
-        IsPropertyManager,
+        permissions.IsAuthenticated,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
         return Payment.objects.select_related(
-            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
@@ -439,14 +405,17 @@ class PaymentCancelView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        payment = self.get_object()
+        if request.user.role != UserRole.PROPERTY_MANAGER:
+            raise PermissionDenied(
+                "Only property managers can update payment status."
+            )
 
-        notes = request.data.get("notes")
+        payment = self.get_object()
 
         try:
             payment = PaymentService.cancel_payment(
                 payment_instance=payment,
-                notes=notes,
+                notes=request.data.get("notes"),
             )
         except ValidationError as exc:
             raise serializers.ValidationError(
@@ -458,4 +427,4 @@ class PaymentCancelView(generics.GenericAPIView):
         return Response(
             PaymentSerializer(payment).data,
             status=status.HTTP_200_OK,
-        )   
+        )
