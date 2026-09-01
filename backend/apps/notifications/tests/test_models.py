@@ -186,7 +186,12 @@ class NotificationModelTests(TestCase):
             title="Second Notification",
         )
 
-        notifications = list(Notification.objects.all())
+        notifications = list(
+            Notification.objects.order_by(
+                "-created_at",
+                "-id",
+            )
+        )
 
         self.assertEqual(
             notifications[0],
