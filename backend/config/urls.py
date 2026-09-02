@@ -46,4 +46,8 @@ urlpatterns = [
         include("apps.payments.api.urls"),
     ),
     
+    path(
+        "api/notifications/",
+        include("apps.notifications.api.urls"),
+    ),
 ]
