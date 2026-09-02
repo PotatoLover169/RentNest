@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.notifications.models import NotificationType
+from apps.notifications.services import NotificationService
 from apps.tenancies.models import Tenancy, TenancyStatus
 
 from .models import Payment, PaymentStatus
@@ -28,13 +30,6 @@ class PaymentService:
     ):
         """
         Create a pending payment for a tenant's tenancy.
-
-        Rules:
-        - Tenancy must exist.
-        - Tenancy must belong to the supplied tenant.
-        - Tenancy must be ACTIVE.
-        - Payment amount cannot be negative.
-        - Newly created payments always start as PENDING.
         """
 
         tenancy = Tenancy.objects.select_for_update().select_related(
@@ -58,7 +53,7 @@ class PaymentService:
                 "Payment amount cannot be negative."
             )
 
-        return Payment.objects.create(
+        payment = Payment.objects.create(
             tenancy=tenancy,
             tenant=tenant,
             amount=amount,
@@ -68,6 +63,18 @@ class PaymentService:
             reference_number=reference_number,
             notes=notes,
         )
+
+        NotificationService.create_notification(
+            recipient=tenant,
+            notification_type=NotificationType.PAYMENT_CREATED,
+            title="New Payment Created",
+            message=(
+                f"A payment of {payment.amount} has been created "
+                f"for your tenancy."
+            ),
+        )
+
+        return payment
 
     @staticmethod
     @transaction.atomic
@@ -79,12 +86,11 @@ class PaymentService:
     ):
         """
         Mark a pending payment as PAID.
-
-        Rules:
-        - Only PENDING payments can be marked as PAID.
         """
 
-        payment = Payment.objects.select_for_update().get(
+        payment = Payment.objects.select_for_update().select_related(
+            "tenant",
+        ).get(
             pk=payment_instance.pk,
         )
 
@@ -110,6 +116,16 @@ class PaymentService:
             ]
         )
 
+        NotificationService.create_notification(
+            recipient=payment.tenant,
+            notification_type=NotificationType.PAYMENT_PAID,
+            title="Payment Marked as Paid",
+            message=(
+                f"Your payment of {payment.amount} has been "
+                f"marked as paid."
+            ),
+        )
+
         return payment
 
     @staticmethod
@@ -121,12 +137,11 @@ class PaymentService:
     ):
         """
         Mark a pending payment as FAILED.
-
-        Rules:
-        - Only PENDING payments can be marked as FAILED.
         """
 
-        payment = Payment.objects.select_for_update().get(
+        payment = Payment.objects.select_for_update().select_related(
+            "tenant",
+        ).get(
             pk=payment_instance.pk,
         )
 
@@ -148,6 +163,16 @@ class PaymentService:
             ]
         )
 
+        NotificationService.create_notification(
+            recipient=payment.tenant,
+            notification_type=NotificationType.PAYMENT_FAILED,
+            title="Payment Failed",
+            message=(
+                f"Your payment of {payment.amount} has been "
+                f"marked as failed."
+            ),
+        )
+
         return payment
 
     @staticmethod
@@ -159,12 +184,11 @@ class PaymentService:
     ):
         """
         Refund a paid payment.
-
-        Rules:
-        - Only PAID payments can be refunded.
         """
 
-        payment = Payment.objects.select_for_update().get(
+        payment = Payment.objects.select_for_update().select_related(
+            "tenant",
+        ).get(
             pk=payment_instance.pk,
         )
 
@@ -186,6 +210,16 @@ class PaymentService:
             ]
         )
 
+        NotificationService.create_notification(
+            recipient=payment.tenant,
+            notification_type=NotificationType.PAYMENT_REFUNDED,
+            title="Payment Refunded",
+            message=(
+                f"Your payment of {payment.amount} has been "
+                f"refunded."
+            ),
+        )
+
         return payment
 
     @staticmethod
@@ -197,12 +231,11 @@ class PaymentService:
     ):
         """
         Cancel a pending payment.
-
-        Rules:
-        - Only PENDING payments can be cancelled.
         """
 
-        payment = Payment.objects.select_for_update().get(
+        payment = Payment.objects.select_for_update().select_related(
+            "tenant",
+        ).get(
             pk=payment_instance.pk,
         )
 
@@ -222,6 +255,16 @@ class PaymentService:
                 "notes",
                 "updated_at",
             ]
+        )
+
+        NotificationService.create_notification(
+            recipient=payment.tenant,
+            notification_type=NotificationType.PAYMENT_CANCELLED,
+            title="Payment Cancelled",
+            message=(
+                f"Your payment of {payment.amount} has been "
+                f"cancelled."
+            ),
         )
 
         return payment
