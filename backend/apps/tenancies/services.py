@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.notifications.models import NotificationType
+from apps.notifications.services import NotificationService
 from apps.properties.models import Unit, UnitStatus
 
 from .models import Tenancy, TenancyStatus
@@ -72,6 +74,20 @@ class TenancyService:
                 ]
             )
 
+        # --------------------------------------------------------
+        # Create notification
+        # --------------------------------------------------------
+
+        NotificationService.create_notification(
+            recipient=tenant,
+            notification_type=NotificationType.TENANCY_CREATED,
+            title="New Tenancy Created",
+            message=(
+                f"A new tenancy has been created for "
+                f"Unit {unit.unit_number}."
+            ),
+        )
+
         return tenancy
 
     # ============================================================
@@ -98,7 +114,10 @@ class TenancyService:
         tenancy = (
             Tenancy.objects
             .select_for_update()
-            .select_related("unit")
+            .select_related(
+                "unit",
+                "tenant",
+            )
             .get(
                 pk=tenancy_instance.pk,
             )
@@ -135,12 +154,6 @@ class TenancyService:
             exclude_tenancy=tenancy,
         )
 
-        if unit.status != UnitStatus.AVAILABLE:
-            raise ValidationError(
-                "Only an available unit can be activated "
-                "for a tenancy."
-            )
-
         # --------------------------------------------------------
         # Activate tenancy
         # --------------------------------------------------------
@@ -165,6 +178,20 @@ class TenancyService:
                 "status",
                 "updated_at",
             ]
+        )
+
+        # --------------------------------------------------------
+        # Create notification
+        # --------------------------------------------------------
+
+        NotificationService.create_notification(
+            recipient=tenancy.tenant,
+            notification_type=NotificationType.TENANCY_UPDATED,
+            title="Tenancy Activated",
+            message=(
+                f"Your tenancy for Unit "
+                f"{unit.unit_number} is now active."
+            ),
         )
 
         return tenancy
@@ -193,7 +220,10 @@ class TenancyService:
         tenancy = (
             Tenancy.objects
             .select_for_update()
-            .select_related("unit")
+            .select_related(
+                "unit",
+                "tenant",
+            )
             .get(
                 pk=tenancy_instance.pk,
             )
@@ -252,6 +282,20 @@ class TenancyService:
                 "status",
                 "updated_at",
             ]
+        )
+
+        # --------------------------------------------------------
+        # Create notification
+        # --------------------------------------------------------
+
+        NotificationService.create_notification(
+            recipient=tenancy.tenant,
+            notification_type=NotificationType.TENANCY_UPDATED,
+            title="Tenancy Ended",
+            message=(
+                f"Your tenancy for Unit "
+                f"{unit.unit_number} has ended."
+            ),
         )
 
         return tenancy

@@ -188,16 +188,6 @@ class TenancyAPITests(APITestCase):
             format="json",
         )
 
-        print(
-            "CREATE TENANCY STATUS:",
-            response.status_code,
-        )
-
-        print(
-            "CREATE TENANCY DATA:",
-            response.data,
-        )
-
         self.assertEqual(
             response.status_code,
             status.HTTP_201_CREATED,
@@ -306,7 +296,7 @@ class TenancyAPITests(APITestCase):
 
         returned_ids = [
             item["id"]
-            for item in response.data
+            for item in response.data["results"]
         ]
 
         self.assertIn(
@@ -332,7 +322,7 @@ class TenancyAPITests(APITestCase):
 
         returned_ids = [
             item["id"]
-            for item in response.data
+            for item in response.data["results"]
         ]
 
         self.assertIn(
