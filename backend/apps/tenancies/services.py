@@ -118,6 +118,7 @@ class TenancyService:
         Rules:
         - Tenancy must not already be active.
         - An ended tenancy cannot be activated.
+        - A cancelled tenancy cannot be activated.
         - The unit must not already have another ACTIVE tenancy.
         - The unit must be AVAILABLE.
         - The unit becomes OCCUPIED.
@@ -207,7 +208,7 @@ class TenancyService:
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
-            notification_type=NotificationType.TENANCY_ACTIVATED,
+            notification_type=NotificationType.TENANCY_UPDATED,
             title="Tenancy Activated",
             message=(
                 f"Your tenancy for {unit.property.name}, "
@@ -315,7 +316,7 @@ class TenancyService:
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
-            notification_type=NotificationType.TENANCY_ENDED,
+            notification_type=NotificationType.TENANCY_UPDATED,
             title="Tenancy Ended",
             message=(
                 f"Your tenancy for {unit.property.name}, "
