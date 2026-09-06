@@ -49,11 +49,17 @@ class NotificationAPITests(TestCase):
             recipient=cls.other_user,
             notification_type=NotificationType.GENERAL,
             title="Other User Notification",
-            message="This notification belongs to another user.",
+            message=(
+                "This notification belongs to another user."
+            ),
         )
 
     def setUp(self):
         self.client = APIClient()
+
+    # ========================================================
+    # AUTHENTICATION HELPER
+    # ========================================================
 
     def authenticate_as(self, user):
         """
@@ -101,76 +107,6 @@ class NotificationAPITests(TestCase):
             "/api/notifications/"
         )
 
-        print("LIST RESPONSE:", response.data)
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            len(response.data),
-            2,
-        )
-
-        notification_ids = [
-            item["id"]
-            for item in response.data
-        ]
-
-        self.assertIn(
-            self.notification.id,
-            notification_ids,
-        )
-
-        self.assertIn(
-            self.second_notification.id,
-            notification_ids,
-        )
-
-    def test_user_cannot_see_other_user_notifications(self):
-        self.authenticate_as(self.user)
-
-        response = self.client.get(
-            "/api/notifications/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        notification_ids = [
-            item["id"]
-            for item in response.data
-        ]
-
-        self.assertNotIn(
-            self.other_notification.id,
-            notification_ids,
-        )
-
-    # ========================================================
-    # RETRIEVE NOTIFICATION
-    # ========================================================
-
-    def test_retrieve_notification_requires_authentication(self):
-        response = self.client.get(
-            f"/api/notifications/{self.notification.id}/"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_401_UNAUTHORIZED,
-        )
-
-    def test_user_can_list_own_notifications(self):
-        self.authenticate_as(self.user)
-
-        response = self.client.get(
-            "/api/notifications/"
-        )
-
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
@@ -196,7 +132,6 @@ class NotificationAPITests(TestCase):
             notification_ids,
         )
 
-
     def test_user_cannot_see_other_user_notifications(self):
         self.authenticate_as(self.user)
 
@@ -207,6 +142,11 @@ class NotificationAPITests(TestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["count"],
+            2,
         )
 
         notification_ids = [
@@ -220,10 +160,74 @@ class NotificationAPITests(TestCase):
         )
 
     # ========================================================
+    # RETRIEVE NOTIFICATION
+    # ========================================================
+
+    def test_retrieve_notification_requires_authentication(self):
+        response = self.client.get(
+            (
+                f"/api/notifications/"
+                f"{self.notification.id}/"
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_user_can_retrieve_own_notification(self):
+        self.authenticate_as(self.user)
+
+        response = self.client.get(
+            (
+                f"/api/notifications/"
+                f"{self.notification.id}/"
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["id"],
+            self.notification.id,
+        )
+
+        self.assertEqual(
+            response.data["title"],
+            self.notification.title,
+        )
+
+        self.assertEqual(
+            response.data["is_read"],
+            False,
+        )
+
+    def test_user_cannot_retrieve_other_user_notification(self):
+        self.authenticate_as(self.user)
+
+        response = self.client.get(
+            (
+                f"/api/notifications/"
+                f"{self.other_notification.id}/"
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    # ========================================================
     # MARK AS READ
     # ========================================================
 
-    def test_mark_notification_as_read_requires_authentication(self):
+    def test_mark_notification_as_read_requires_authentication(
+        self,
+    ):
         response = self.client.post(
             (
                 f"/api/notifications/"
@@ -269,7 +273,13 @@ class NotificationAPITests(TestCase):
             self.notification.is_read
         )
 
-    def test_user_cannot_mark_other_user_notification_as_read(self):
+        self.assertIsNotNone(
+            self.notification.read_at
+        )
+
+    def test_user_cannot_mark_other_user_notification_as_read(
+        self,
+    ):
         self.authenticate_as(self.user)
 
         response = self.client.post(
@@ -290,7 +300,9 @@ class NotificationAPITests(TestCase):
     # MARK AS UNREAD
     # ========================================================
 
-    def test_mark_notification_as_unread_requires_authentication(self):
+    def test_mark_notification_as_unread_requires_authentication(
+        self,
+    ):
         response = self.client.post(
             (
                 f"/api/notifications/"
@@ -339,7 +351,13 @@ class NotificationAPITests(TestCase):
             self.notification.is_read
         )
 
-    def test_user_cannot_mark_other_notification_as_unread(self):
+        self.assertIsNone(
+            self.notification.read_at
+        )
+
+    def test_user_cannot_mark_other_notification_as_unread(
+        self,
+    ):
         self.other_notification.is_read = True
         self.other_notification.save()
 
@@ -363,7 +381,9 @@ class NotificationAPITests(TestCase):
     # MARK ALL AS READ
     # ========================================================
 
-    def test_mark_all_notifications_as_read_requires_authentication(self):
+    def test_mark_all_notifications_as_read_requires_authentication(
+        self,
+    ):
         response = self.client.post(
             "/api/notifications/mark-all-read/",
             {},
@@ -425,6 +445,41 @@ class NotificationAPITests(TestCase):
 
         self.assertFalse(
             self.other_notification.is_read
+        )
+
+    def test_mark_all_read_only_updates_unread_notifications(
+        self,
+    ):
+        self.notification.is_read = True
+        self.notification.save()
+
+        self.authenticate_as(self.user)
+
+        response = self.client.post(
+            "/api/notifications/mark-all-read/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["updated_count"],
+            1,
+        )
+
+        self.notification.refresh_from_db()
+        self.second_notification.refresh_from_db()
+
+        self.assertTrue(
+            self.notification.is_read
+        )
+
+        self.assertTrue(
+            self.second_notification.is_read
         )
 
     # ========================================================
