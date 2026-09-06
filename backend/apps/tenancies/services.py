@@ -34,7 +34,18 @@ class TenancyService:
         - A unit cannot have multiple ACTIVE tenancies.
         - An ACTIVE tenancy requires an AVAILABLE unit.
         - Creating an ACTIVE tenancy makes the unit OCCUPIED.
+        - Creating a tenancy creates a notification for the tenant.
         """
+
+        # --------------------------------------------------------
+        # Lock unit
+        # --------------------------------------------------------
+
+        unit = Unit.objects.select_for_update().select_related(
+            "property",
+        ).get(
+            pk=unit.pk,
+        )
 
         # --------------------------------------------------------
         # ACTIVE tenancy validation
@@ -84,7 +95,8 @@ class TenancyService:
             title="New Tenancy Created",
             message=(
                 f"A new tenancy has been created for "
-                f"Unit {unit.unit_number}."
+                f"{unit.property.name}, Unit "
+                f"{unit.unit_number}."
             ),
         )
 
@@ -109,6 +121,7 @@ class TenancyService:
         - The unit must not already have another ACTIVE tenancy.
         - The unit must be AVAILABLE.
         - The unit becomes OCCUPIED.
+        - The tenant receives a notification.
         """
 
         tenancy = (
@@ -116,6 +129,7 @@ class TenancyService:
             .select_for_update()
             .select_related(
                 "unit",
+                "unit__property",
                 "tenant",
             )
             .get(
@@ -137,11 +151,18 @@ class TenancyService:
                 "An ended tenancy cannot be activated."
             )
 
+        if tenancy.status == TenancyStatus.CANCELLED:
+            raise ValidationError(
+                "A cancelled tenancy cannot be activated."
+            )
+
         # --------------------------------------------------------
-        # Lock the unit
+        # Lock unit
         # --------------------------------------------------------
 
-        unit = Unit.objects.select_for_update().get(
+        unit = Unit.objects.select_for_update().select_related(
+            "property",
+        ).get(
             pk=tenancy.unit_id,
         )
 
@@ -186,11 +207,11 @@ class TenancyService:
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
-            notification_type=NotificationType.TENANCY_UPDATED,
+            notification_type=NotificationType.TENANCY_ACTIVATED,
             title="Tenancy Activated",
             message=(
-                f"Your tenancy for Unit "
-                f"{unit.unit_number} is now active."
+                f"Your tenancy for {unit.property.name}, "
+                f"Unit {unit.unit_number}, is now active."
             ),
         )
 
@@ -215,6 +236,7 @@ class TenancyService:
         - End date cannot be before start date.
         - The tenancy becomes ENDED.
         - The unit becomes AVAILABLE.
+        - The tenant receives a notification.
         """
 
         tenancy = (
@@ -222,6 +244,7 @@ class TenancyService:
             .select_for_update()
             .select_related(
                 "unit",
+                "unit__property",
                 "tenant",
             )
             .get(
@@ -252,7 +275,9 @@ class TenancyService:
         # Lock unit
         # --------------------------------------------------------
 
-        unit = Unit.objects.select_for_update().get(
+        unit = Unit.objects.select_for_update().select_related(
+            "property",
+        ).get(
             pk=tenancy.unit_id,
         )
 
@@ -290,11 +315,11 @@ class TenancyService:
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
-            notification_type=NotificationType.TENANCY_UPDATED,
+            notification_type=NotificationType.TENANCY_ENDED,
             title="Tenancy Ended",
             message=(
-                f"Your tenancy for Unit "
-                f"{unit.unit_number} has ended."
+                f"Your tenancy for {unit.property.name}, "
+                f"Unit {unit.unit_number}, has ended."
             ),
         )
 

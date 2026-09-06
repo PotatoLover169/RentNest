@@ -23,14 +23,24 @@ class NotificationType(models.TextChoices):
         "PAYMENT_CANCELLED",
         "Payment Cancelled",
     )
+
     TENANCY_CREATED = (
         "TENANCY_CREATED",
         "Tenancy Created",
+    )
+    TENANCY_ACTIVATED = (
+        "TENANCY_ACTIVATED",
+        "Tenancy Activated",
+    )
+    TENANCY_ENDED = (
+        "TENANCY_ENDED",
+        "Tenancy Ended",
     )
     TENANCY_UPDATED = (
         "TENANCY_UPDATED",
         "Tenancy Updated",
     )
+
     GENERAL = (
         "GENERAL",
         "General",
