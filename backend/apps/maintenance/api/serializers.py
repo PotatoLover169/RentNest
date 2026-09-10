@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.maintenance.models import MaintenanceRequest
+from apps.properties.models import Unit
 
 
 class MaintenanceRequestSerializer(
@@ -9,8 +10,9 @@ class MaintenanceRequestSerializer(
     """
     Serializer for maintenance requests.
 
-    Tenant, unit, status, assigned manager and timestamps
-    are controlled by the service/API workflow.
+    Tenant, property, status, assigned manager and
+    workflow timestamps are controlled by the
+    service/API workflow.
     """
 
     tenant = serializers.PrimaryKeyRelatedField(
@@ -18,7 +20,10 @@ class MaintenanceRequestSerializer(
     )
 
     unit = serializers.PrimaryKeyRelatedField(
-        read_only=True,
+        queryset=Unit.objects.select_related(
+            "property",
+        ),
+        required=True,
     )
 
     assigned_to = serializers.PrimaryKeyRelatedField(
@@ -30,25 +35,29 @@ class MaintenanceRequestSerializer(
 
         fields = [
             "id",
-            "unit",
             "tenant",
+            "property",
+            "unit",
+            "assigned_to",
             "title",
             "description",
             "priority",
             "status",
-            "assigned_to",
-            "resolution_notes",
+            "estimated_cost",
+            "actual_cost",
+            "completed_at",
             "created_at",
             "updated_at",
         ]
 
         read_only_fields = [
             "id",
-            "unit",
             "tenant",
-            "status",
+            "property",
             "assigned_to",
-            "resolution_notes",
+            "status",
+            "actual_cost",
+            "completed_at",
             "created_at",
             "updated_at",
         ]

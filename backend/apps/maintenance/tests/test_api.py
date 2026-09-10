@@ -67,8 +67,6 @@ class MaintenanceAPITests(TestCase):
             monthly_rent=Decimal("15000.00"),
         )
 
-        cls.client = APIClient()
-
     def setUp(self):
         self.client = APIClient()
 
@@ -80,8 +78,10 @@ class MaintenanceAPITests(TestCase):
         self,
         tenant=None,
     ):
+        tenant = tenant or self.tenant
+
         return TenancyService.create_tenancy(
-            tenant=tenant or self.tenant,
+            tenant=tenant,
             unit=self.unit,
             start_date="2026-08-01",
             monthly_rent=Decimal("15000.00"),
@@ -89,14 +89,23 @@ class MaintenanceAPITests(TestCase):
             status=TenancyStatus.ACTIVE,
         )
 
-    def create_request(self):
-        self.create_active_tenancy()
+    def create_request(
+        self,
+        tenant=None,
+    ):
+        tenant = tenant or self.tenant
+
+        self.create_active_tenancy(
+            tenant=tenant,
+        )
 
         return MaintenanceRequest.objects.create(
-            tenant=self.tenant,
+            tenant=tenant,
+            property=self.property,
             unit=self.unit,
             title="Leaking faucet",
             description="Kitchen faucet is leaking.",
+            status=MaintenanceStatus.PENDING,
         )
 
     def list_url(self):
@@ -108,11 +117,8 @@ class MaintenanceAPITests(TestCase):
     def start_url(self, pk):
         return f"/api/maintenance/{pk}/start/"
 
-    def resolve_url(self, pk):
-        return f"/api/maintenance/{pk}/resolve/"
-
-    def close_url(self, pk):
-        return f"/api/maintenance/{pk}/close/"
+    def complete_url(self, pk):
+        return f"/api/maintenance/{pk}/complete/"
 
     def cancel_url(self, pk):
         return f"/api/maintenance/{pk}/cancel/"
@@ -156,14 +162,31 @@ class MaintenanceAPITests(TestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_201_CREATED,
+            response.data,
         )
 
         self.assertTrue(
             MaintenanceRequest.objects.filter(
                 tenant=self.tenant,
+                property=self.property,
                 unit=self.unit,
                 title="Broken faucet",
             ).exists()
+        )
+
+        request = MaintenanceRequest.objects.get(
+            tenant=self.tenant,
+            title="Broken faucet",
+        )
+
+        self.assertEqual(
+            request.status,
+            MaintenanceStatus.PENDING,
+        )
+
+        self.assertEqual(
+            request.priority,
+            "HIGH",
         )
 
     def test_property_manager_cannot_create_request(self):
@@ -229,12 +252,17 @@ class MaintenanceAPITests(TestCase):
         )
 
         self.assertEqual(
-            len(response.data),
+            response.data["count"],
             1,
         )
 
         self.assertEqual(
-            response.data[0]["id"],
+            len(response.data["results"]),
+            1,
+        )
+
+        self.assertEqual(
+            response.data["results"][0]["id"],
             request.id,
         )
 
@@ -255,15 +283,20 @@ class MaintenanceAPITests(TestCase):
         )
 
         self.assertEqual(
-            len(response.data),
+            response.data["count"],
             1,
         )
 
         self.assertEqual(
-            response.data[0]["id"],
-            request.id,
+            len(response.data["results"]),
+            1,
         )
 
+        self.assertEqual(
+            response.data["results"][0]["id"],
+            request.id,
+        )
+    
     # ==========================================================
     # START
     # ==========================================================
@@ -282,6 +315,7 @@ class MaintenanceAPITests(TestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
+            response.data,
         )
 
         request.refresh_from_db()
@@ -297,24 +331,30 @@ class MaintenanceAPITests(TestCase):
         )
 
     # ==========================================================
-    # RESOLVE
+    # COMPLETE
     # ==========================================================
 
-    def test_manager_can_resolve_request(self):
+    def test_manager_can_complete_request(self):
         request = self.create_request()
 
         self.client.force_authenticate(
             user=self.manager,
         )
 
-        self.client.post(
+        start_response = self.client.post(
             self.start_url(request.id),
         )
 
+        self.assertEqual(
+            start_response.status_code,
+            status.HTTP_200_OK,
+            start_response.data,
+        )
+
         response = self.client.post(
-            self.resolve_url(request.id),
+            self.complete_url(request.id),
             {
-                "resolution_notes": "Faucet replaced.",
+                "actual_cost": "1500.00",
             },
             format="json",
         )
@@ -322,64 +362,30 @@ class MaintenanceAPITests(TestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
+            response.data,
         )
 
         request.refresh_from_db()
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.RESOLVED,
+            MaintenanceStatus.COMPLETED,
         )
 
         self.assertEqual(
-            request.resolution_notes,
-            "Faucet replaced.",
+            request.actual_cost,
+            Decimal("1500.00"),
         )
 
-    # ==========================================================
-    # CLOSE
-    # ==========================================================
-
-    def test_manager_can_close_resolved_request(self):
-        request = self.create_request()
-
-        self.client.force_authenticate(
-            user=self.manager,
-        )
-
-        self.client.post(
-            self.start_url(request.id),
-        )
-
-        self.client.post(
-            self.resolve_url(request.id),
-            {
-                "resolution_notes": "Faucet replaced.",
-            },
-            format="json",
-        )
-
-        response = self.client.post(
-            self.close_url(request.id),
-        )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-
-        request.refresh_from_db()
-
-        self.assertEqual(
-            request.status,
-            MaintenanceStatus.CLOSED,
+        self.assertIsNotNone(
+            request.completed_at,
         )
 
     # ==========================================================
     # CANCEL
     # ==========================================================
 
-    def test_tenant_can_cancel_open_request(self):
+    def test_tenant_can_cancel_pending_request(self):
         request = self.create_request()
 
         self.client.force_authenticate(
@@ -393,6 +399,7 @@ class MaintenanceAPITests(TestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
+            response.data,
         )
 
         request.refresh_from_db()
@@ -406,7 +413,7 @@ class MaintenanceAPITests(TestCase):
     # WORKFLOW PROTECTION
     # ==========================================================
 
-    def test_manager_cannot_resolve_open_request_directly(
+    def test_manager_cannot_complete_pending_request_directly(
         self,
     ):
         request = self.create_request()
@@ -416,9 +423,9 @@ class MaintenanceAPITests(TestCase):
         )
 
         response = self.client.post(
-            self.resolve_url(request.id),
+            self.complete_url(request.id),
             {
-                "resolution_notes": "Fixed.",
+                "actual_cost": "1500.00",
             },
             format="json",
         )
@@ -438,7 +445,7 @@ class MaintenanceAPITests(TestCase):
         response = self.client.patch(
             self.detail_url(request.id),
             {
-                "status": "CLOSED",
+                "status": "COMPLETED",
             },
             format="json",
         )
@@ -452,7 +459,7 @@ class MaintenanceAPITests(TestCase):
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.OPEN,
+            MaintenanceStatus.PENDING,
         )
 
     def test_other_manager_cannot_start_request(self):

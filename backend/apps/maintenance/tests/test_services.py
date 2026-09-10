@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.accounts.models import User
+from apps.maintenance.models import MaintenanceStatus
+from apps.maintenance.services import MaintenanceService
 from apps.properties.models import (
     Property,
     PropertyType,
@@ -12,11 +14,6 @@ from apps.properties.models import (
 )
 from apps.tenancies.models import TenancyStatus
 from apps.tenancies.services import TenancyService
-
-from apps.maintenance.models import (
-    MaintenanceStatus,
-)
-from apps.maintenance.services import MaintenanceService
 
 
 class MaintenanceServiceTests(TestCase):
@@ -61,6 +58,10 @@ class MaintenanceServiceTests(TestCase):
             monthly_rent=Decimal("15000.00"),
         )
 
+    # ============================================================
+    # HELPERS
+    # ============================================================
+
     def create_active_tenancy(self):
         return TenancyService.create_tenancy(
             tenant=self.tenant,
@@ -81,17 +82,31 @@ class MaintenanceServiceTests(TestCase):
             description="Kitchen faucet is leaking.",
         )
 
+    # ============================================================
+    # CREATE REQUEST
+    # ============================================================
+
     def test_tenant_can_create_request(self):
         request = self.create_request()
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.OPEN,
+            MaintenanceStatus.PENDING,
         )
 
         self.assertEqual(
             request.tenant,
             self.tenant,
+        )
+
+        self.assertEqual(
+            request.property,
+            self.property,
+        )
+
+        self.assertEqual(
+            request.unit,
+            self.unit,
         )
 
     def test_non_tenant_cannot_create_request(self):
@@ -103,7 +118,9 @@ class MaintenanceServiceTests(TestCase):
                 description="Test request.",
             )
 
-    def test_tenant_without_active_tenancy_cannot_create_request(self):
+    def test_tenant_without_active_tenancy_cannot_create_request(
+        self,
+    ):
         with self.assertRaises(ValidationError):
             MaintenanceService.create_request(
                 tenant=self.tenant,
@@ -111,6 +128,10 @@ class MaintenanceServiceTests(TestCase):
                 title="Test",
                 description="Test request.",
             )
+
+    # ============================================================
+    # START REQUEST
+    # ============================================================
 
     def test_manager_can_start_request(self):
         request = self.create_request()
@@ -130,7 +151,20 @@ class MaintenanceServiceTests(TestCase):
             self.manager,
         )
 
-    def test_manager_can_resolve_request(self):
+    def test_other_manager_cannot_manage_request(self):
+        request = self.create_request()
+
+        with self.assertRaises(ValidationError):
+            MaintenanceService.start_request(
+                request_instance=request,
+                manager=self.other_manager,
+            )
+
+    # ============================================================
+    # COMPLETE REQUEST
+    # ============================================================
+
+    def test_manager_can_complete_request(self):
         request = self.create_request()
 
         request = MaintenanceService.start_request(
@@ -138,23 +172,40 @@ class MaintenanceServiceTests(TestCase):
             manager=self.manager,
         )
 
-        request = MaintenanceService.resolve_request(
+        request = MaintenanceService.complete_request(
             request_instance=request,
             manager=self.manager,
-            resolution_notes="Faucet replaced.",
+            actual_cost=Decimal("2500.00"),
         )
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.RESOLVED,
+            MaintenanceStatus.COMPLETED,
         )
 
         self.assertEqual(
-            request.resolution_notes,
-            "Faucet replaced.",
+            request.actual_cost,
+            Decimal("2500.00"),
         )
 
-    def test_manager_can_close_resolved_request(self):
+        self.assertIsNotNone(
+            request.completed_at,
+        )
+
+    def test_pending_request_cannot_be_completed_directly(
+        self,
+    ):
+        request = self.create_request()
+
+        with self.assertRaises(ValidationError):
+            MaintenanceService.complete_request(
+                request_instance=request,
+                manager=self.manager,
+            )
+
+    def test_completed_request_cannot_be_completed_again(
+        self,
+    ):
         request = self.create_request()
 
         request = MaintenanceService.start_request(
@@ -162,23 +213,24 @@ class MaintenanceServiceTests(TestCase):
             manager=self.manager,
         )
 
-        request = MaintenanceService.resolve_request(
-            request_instance=request,
-            manager=self.manager,
-            resolution_notes="Faucet replaced.",
-        )
-
-        request = MaintenanceService.close_request(
+        request = MaintenanceService.complete_request(
             request_instance=request,
             manager=self.manager,
         )
 
-        self.assertEqual(
-            request.status,
-            MaintenanceStatus.CLOSED,
-        )
+        with self.assertRaises(ValidationError):
+            MaintenanceService.complete_request(
+                request_instance=request,
+                manager=self.manager,
+            )
 
-    def test_open_request_can_be_cancelled_by_tenant(self):
+    # ============================================================
+    # CANCEL REQUEST
+    # ============================================================
+
+    def test_pending_request_can_be_cancelled_by_tenant(
+        self,
+    ):
         request = self.create_request()
 
         request = MaintenanceService.cancel_request(
@@ -191,36 +243,37 @@ class MaintenanceServiceTests(TestCase):
             MaintenanceStatus.CANCELLED,
         )
 
-    def test_other_manager_cannot_manage_request(self):
+    def test_in_progress_request_cannot_be_cancelled(
+        self,
+    ):
         request = self.create_request()
 
-        with self.assertRaises(ValidationError):
-            MaintenanceService.start_request(
-                request_instance=request,
-                manager=self.other_manager,
-            )
-
-    def test_resolved_request_requires_notes(self):
-        request = self.create_request()
-
-        MaintenanceService.start_request(
+        request = MaintenanceService.start_request(
             request_instance=request,
             manager=self.manager,
         )
 
         with self.assertRaises(ValidationError):
-            MaintenanceService.resolve_request(
+            MaintenanceService.cancel_request(
                 request_instance=request,
-                manager=self.manager,
-                resolution_notes="",
+                tenant=self.tenant,
             )
 
-    def test_open_request_cannot_be_resolved_directly(self):
+    def test_other_tenant_cannot_cancel_request(
+        self,
+    ):
+        from apps.accounts.models import User
+
+        other_tenant = User.objects.create_user(
+            email="other-tenant@example.com",
+            password="StrongPassword123!",
+            role="TENANT",
+        )
+
         request = self.create_request()
 
         with self.assertRaises(ValidationError):
-            MaintenanceService.resolve_request(
+            MaintenanceService.cancel_request(
                 request_instance=request,
-                manager=self.manager,
-                resolution_notes="Fixed.",
+                tenant=other_tenant,
             )

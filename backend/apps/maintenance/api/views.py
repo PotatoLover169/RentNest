@@ -11,12 +11,8 @@ from rest_framework import (
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
-from apps.maintenance.models import (
-    MaintenanceRequest,
-)
-from apps.maintenance.services import (
-    MaintenanceService,
-)
+from apps.maintenance.models import MaintenanceRequest
+from apps.maintenance.services import MaintenanceService
 from apps.properties.permissions import IsPropertyManager
 
 from .serializers import MaintenanceRequestSerializer
@@ -31,34 +27,28 @@ class MaintenanceListCreateView(
     generics.ListCreateAPIView
 ):
     """
-    List maintenance requests accessible to the user.
+    List and create maintenance requests.
 
-    Tenants can create requests for their active unit.
+    Tenants can create requests for units where they
+    have an active tenancy.
 
     Property managers can view requests for properties
     they manage.
     """
 
     serializer_class = MaintenanceRequestSerializer
-
-    def get_permissions(self):
-        if self.request.method == "POST":
-            return [
-                permissions.IsAuthenticated(),
-            ]
-
-        return [
-            permissions.IsAuthenticated(),
-        ]
+    permission_classes = [
+        permissions.IsAuthenticated,
+    ]
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
         queryset = MaintenanceRequest.objects.select_related(
             "tenant",
+            "property",
+            "property__manager",
             "unit",
-            "unit__property",
-            "unit__property__manager",
             "assigned_to",
         )
 
@@ -67,7 +57,7 @@ class MaintenanceListCreateView(
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
-                unit__property__manager=user,
+                property__manager=user,
             )
 
         if user.role == UserRole.TENANT:
@@ -90,9 +80,11 @@ class MaintenanceListCreateView(
                 }
             )
 
-        unit_id = self.request.data.get("unit")
+        unit = serializer.validated_data.get(
+            "unit"
+        )
 
-        if not unit_id:
+        if unit is None:
             raise serializers.ValidationError(
                 {
                     "unit": (
@@ -102,20 +94,19 @@ class MaintenanceListCreateView(
                 }
             )
 
-        from apps.properties.models import Unit
-
-        unit = get_object_or_404(
-            Unit.objects.select_related(
-                "property",
-            ),
-            pk=unit_id,
-        )
-
         try:
             MaintenanceService.create_request(
                 tenant=user,
                 unit=unit,
-                **serializer.validated_data,
+                title=serializer.validated_data[
+                    "title"
+                ],
+                description=serializer.validated_data[
+                    "description"
+                ],
+                priority=serializer.validated_data.get(
+                    "priority"
+                ),
             )
 
         except ValidationError as exc:
@@ -127,7 +118,7 @@ class MaintenanceListCreateView(
 
 
 # ============================================================
-# DETAIL
+# DETAIL / UPDATE
 # ============================================================
 
 
@@ -137,33 +128,23 @@ class MaintenanceDetailView(
     """
     Retrieve or update a maintenance request.
 
-    Status and workflow fields cannot be changed through
-    normal PATCH/PUT requests.
+    Workflow-related fields cannot be changed through
+    normal PATCH or PUT requests.
     """
 
     serializer_class = MaintenanceRequestSerializer
-
-    def get_permissions(self):
-        if self.request.method in (
-            "PUT",
-            "PATCH",
-        ):
-            return [
-                permissions.IsAuthenticated(),
-            ]
-
-        return [
-            permissions.IsAuthenticated(),
-        ]
+    permission_classes = [
+        permissions.IsAuthenticated,
+    ]
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
         queryset = MaintenanceRequest.objects.select_related(
             "tenant",
+            "property",
+            "property__manager",
             "unit",
-            "unit__property",
-            "unit__property__manager",
             "assigned_to",
         )
 
@@ -172,7 +153,7 @@ class MaintenanceDetailView(
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
-                unit__property__manager=user,
+                property__manager=user,
             )
 
         if user.role == UserRole.TENANT:
@@ -198,7 +179,8 @@ class MaintenanceDetailView(
         forbidden_fields = {
             "status",
             "assigned_to",
-            "resolution_notes",
+            "actual_cost",
+            "completed_at",
         }
 
         attempted_fields = (
@@ -229,7 +211,10 @@ class MaintenanceStartView(
     generics.GenericAPIView
 ):
     """
-    Start work on an OPEN maintenance request.
+    Start work on a PENDING maintenance request.
+
+    Only the property manager who manages the property
+    can start the request.
     """
 
     permission_classes = [
@@ -240,7 +225,7 @@ class MaintenanceStartView(
 
     def get_queryset(self):
         return MaintenanceRequest.objects.filter(
-            unit__property__manager=self.request.user,
+            property__manager=self.request.user,
         )
 
     def get_object(self):
@@ -276,15 +261,18 @@ class MaintenanceStartView(
 
 
 # ============================================================
-# RESOLVE
+# COMPLETE
 # ============================================================
 
 
-class MaintenanceResolveView(
+class MaintenanceCompleteView(
     generics.GenericAPIView
 ):
     """
-    Resolve an IN_PROGRESS maintenance request.
+    Complete an IN_PROGRESS maintenance request.
+
+    Only the property manager who manages the property
+    can complete the request.
     """
 
     permission_classes = [
@@ -295,7 +283,7 @@ class MaintenanceResolveView(
 
     def get_queryset(self):
         return MaintenanceRequest.objects.filter(
-            unit__property__manager=self.request.user,
+            property__manager=self.request.user,
         )
 
     def get_object(self):
@@ -307,80 +295,35 @@ class MaintenanceResolveView(
     def post(self, request, *args, **kwargs):
         maintenance_request = self.get_object()
 
-        resolution_notes = request.data.get(
-            "resolution_notes"
+        actual_cost = request.data.get(
+            "actual_cost",
+            None,
         )
 
-        if resolution_notes is None:
-            raise serializers.ValidationError(
-                {
-                    "resolution_notes": (
-                        "Resolution notes are required."
-                    )
-                }
-            )
-
-        try:
-            maintenance_request = (
-                MaintenanceService.resolve_request(
-                    request_instance=maintenance_request,
-                    manager=request.user,
-                    resolution_notes=resolution_notes,
+        if actual_cost is not None:
+            try:
+                actual_cost = float(
+                    actual_cost
                 )
-            )
-
-        except ValidationError as exc:
-            raise serializers.ValidationError(
-                {
-                    "detail": exc.messages,
-                }
-            )
-
-        return Response(
-            MaintenanceRequestSerializer(
-                maintenance_request
-            ).data,
-            status=status.HTTP_200_OK,
-        )
-
-
-# ============================================================
-# CLOSE
-# ============================================================
-
-
-class MaintenanceCloseView(
-    generics.GenericAPIView
-):
-    """
-    Close a RESOLVED maintenance request.
-    """
-
-    permission_classes = [
-        IsPropertyManager,
-    ]
-
-    serializer_class = MaintenanceRequestSerializer
-
-    def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
-            unit__property__manager=self.request.user,
-        )
-
-    def get_object(self):
-        return get_object_or_404(
-            self.get_queryset(),
-            pk=self.kwargs["pk"],
-        )
-
-    def post(self, request, *args, **kwargs):
-        maintenance_request = self.get_object()
+            except (
+                TypeError,
+                ValueError,
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "actual_cost": (
+                            "Actual cost must be a valid "
+                            "number."
+                        )
+                    }
+                )
 
         try:
             maintenance_request = (
-                MaintenanceService.close_request(
+                MaintenanceService.complete_request(
                     request_instance=maintenance_request,
                     manager=request.user,
+                    actual_cost=actual_cost,
                 )
             )
 
@@ -408,7 +351,7 @@ class MaintenanceCancelView(
     generics.GenericAPIView
 ):
     """
-    Cancel an OPEN maintenance request.
+    Cancel a PENDING maintenance request.
 
     Only the tenant who created the request can cancel it.
     """

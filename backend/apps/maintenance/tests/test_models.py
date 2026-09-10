@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.accounts.models import User
@@ -54,12 +53,31 @@ class MaintenanceModelTests(TestCase):
             monthly_rent=Decimal("15000.00"),
         )
 
+    def create_request(self, **kwargs):
+        """
+        Helper for creating a valid maintenance request.
+        """
+
+        defaults = {
+            "property": self.property,
+            "unit": self.unit,
+            "tenant": self.tenant,
+            "title": "Leaking faucet",
+            "description": "The kitchen faucet is leaking.",
+        }
+
+        defaults.update(kwargs)
+
+        return MaintenanceRequest.objects.create(
+            **defaults
+        )
+
     def test_maintenance_request_can_be_created(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
-            title="Leaking faucet",
-            description="The kitchen faucet is leaking.",
+        request = self.create_request()
+
+        self.assertEqual(
+            request.property,
+            self.property,
         )
 
         self.assertEqual(
@@ -78,11 +96,11 @@ class MaintenanceModelTests(TestCase):
         )
 
     def test_default_priority_is_medium(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+        request = self.create_request(
             title="Broken light",
-            description="The bedroom light is not working.",
+            description=(
+                "The bedroom light is not working."
+            ),
         )
 
         self.assertEqual(
@@ -90,25 +108,25 @@ class MaintenanceModelTests(TestCase):
             MaintenancePriority.MEDIUM,
         )
 
-    def test_default_status_is_open(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+    def test_default_status_is_pending(self):
+        request = self.create_request(
             title="Broken light",
-            description="The bedroom light is not working.",
+            description=(
+                "The bedroom light is not working."
+            ),
         )
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.OPEN,
+            MaintenanceStatus.PENDING,
         )
 
     def test_assigned_manager_can_be_null(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+        request = self.create_request(
             title="Broken door",
-            description="The front door lock is broken.",
+            description=(
+                "The front door lock is broken."
+            ),
         )
 
         self.assertIsNone(
@@ -116,11 +134,11 @@ class MaintenanceModelTests(TestCase):
         )
 
     def test_manager_can_be_assigned(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+        request = self.create_request(
             title="Broken door",
-            description="The front door lock is broken.",
+            description=(
+                "The front door lock is broken."
+            ),
             assigned_to=self.manager,
         )
 
@@ -130,11 +148,11 @@ class MaintenanceModelTests(TestCase):
         )
 
     def test_priority_choices_are_supported(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+        request = self.create_request(
             title="Electrical problem",
-            description="Power outlet is not working.",
+            description=(
+                "Power outlet is not working."
+            ),
             priority=MaintenancePriority.HIGH,
         )
 
@@ -143,48 +161,64 @@ class MaintenanceModelTests(TestCase):
             MaintenancePriority.HIGH,
         )
 
-    def test_resolution_notes_can_be_blank(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
-            title="Small issue",
-            description="Minor maintenance issue.",
+    def test_unit_can_be_null(self):
+        request = self.create_request(
+            unit=None,
+            title="Property issue",
+            description=(
+                "There is a maintenance issue "
+                "in a shared area."
+            ),
+        )
+
+        self.assertIsNone(
+            request.unit,
         )
 
         self.assertEqual(
-            request.resolution_notes,
-            "",
+            request.property,
+            self.property,
         )
 
-    def test_string_representation(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
-            title="Leaking faucet",
-            description="Kitchen faucet is leaking.",
+    def test_completed_at_can_be_null(self):
+        request = self.create_request()
+
+        self.assertIsNone(
+            request.completed_at,
         )
 
-        self.assertEqual(
-            str(request),
-            "Leaking faucet - Unit 101",
+    def test_estimated_cost_can_be_null(self):
+        request = self.create_request()
+
+        self.assertIsNone(
+            request.estimated_cost,
         )
 
-    def test_request_can_be_resolved(self):
-        request = MaintenanceRequest.objects.create(
-            unit=self.unit,
-            tenant=self.tenant,
+    def test_actual_cost_can_be_null(self):
+        request = self.create_request()
+
+        self.assertIsNone(
+            request.actual_cost,
+        )
+
+    def test_request_can_be_completed(self):
+        request = self.create_request(
             title="Broken light",
             description="Bedroom light is broken.",
-            status=MaintenanceStatus.RESOLVED,
-            resolution_notes="Bulb replaced.",
+            status=MaintenanceStatus.COMPLETED,
         )
 
         self.assertEqual(
             request.status,
-            MaintenanceStatus.RESOLVED,
+            MaintenanceStatus.COMPLETED,
+        )
+
+    def test_string_representation(self):
+        request = self.create_request(
+            title="Leaking faucet",
         )
 
         self.assertEqual(
-            request.resolution_notes,
-            "Bulb replaced.",
+            str(request),
+            "Leaking faucet - Sunrise Apartments",
         )

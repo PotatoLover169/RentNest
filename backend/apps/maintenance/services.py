@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import UserRole
 from apps.properties.models import Unit
@@ -33,13 +34,23 @@ class MaintenanceService:
         Rules:
         - Only tenants can submit requests.
         - Tenant must have an ACTIVE tenancy for the unit.
-        - Unit must belong to the tenant's active tenancy.
+        - The maintenance request belongs to the unit's property.
+        - New requests start with PENDING status.
         """
 
         if tenant.role != UserRole.TENANT:
             raise ValidationError(
                 "Only tenants can submit maintenance requests."
             )
+
+        unit = (
+            Unit.objects
+            .select_for_update()
+            .select_related("property")
+            .get(
+                pk=unit.pk,
+            )
+        )
 
         has_active_tenancy = tenant.tenancies.filter(
             unit=unit,
@@ -53,12 +64,13 @@ class MaintenanceService:
             )
 
         return MaintenanceRequest.objects.create(
-            unit=unit,
             tenant=tenant,
+            property=unit.property,
+            unit=unit,
             title=title,
             description=description,
             priority=priority,
-            status=MaintenanceStatus.OPEN,
+            status=MaintenanceStatus.PENDING,
         )
 
     # ============================================================
@@ -73,15 +85,15 @@ class MaintenanceService:
         manager,
     ):
         """
-        Move an OPEN request to IN_PROGRESS.
+        Move a PENDING request to IN_PROGRESS.
         """
 
         maintenance_request = (
             MaintenanceRequest.objects
             .select_for_update()
             .select_related(
+                "property",
                 "unit",
-                "unit__property",
             )
             .get(
                 pk=request_instance.pk,
@@ -93,9 +105,11 @@ class MaintenanceService:
             manager=manager,
         )
 
-        if maintenance_request.status != MaintenanceStatus.OPEN:
+        if maintenance_request.status != (
+            MaintenanceStatus.PENDING
+        ):
             raise ValidationError(
-                "Only an open maintenance request "
+                "Only a pending maintenance request "
                 "can be started."
             )
 
@@ -116,27 +130,29 @@ class MaintenanceService:
         return maintenance_request
 
     # ============================================================
-    # RESOLVE REQUEST
+    # COMPLETE REQUEST
     # ============================================================
 
     @staticmethod
     @transaction.atomic
-    def resolve_request(
+    def complete_request(
         *,
         request_instance,
         manager,
-        resolution_notes,
+        actual_cost=None,
     ):
         """
-        Move an IN_PROGRESS request to RESOLVED.
+        Move an IN_PROGRESS request to COMPLETED.
+
+        Optionally records the actual maintenance cost.
         """
 
         maintenance_request = (
             MaintenanceRequest.objects
             .select_for_update()
             .select_related(
+                "property",
                 "unit",
-                "unit__property",
             )
             .get(
                 pk=request_instance.pk,
@@ -153,81 +169,39 @@ class MaintenanceService:
         ):
             raise ValidationError(
                 "Only an in-progress maintenance request "
-                "can be resolved."
+                "can be completed."
             )
 
-        if not resolution_notes:
-            raise ValidationError(
-                "Resolution notes are required."
-            )
-
-        maintenance_request.status = (
-            MaintenanceStatus.RESOLVED
-        )
-
-        maintenance_request.resolution_notes = (
-            resolution_notes
-        )
-
-        maintenance_request.save(
-            update_fields=[
-                "status",
-                "resolution_notes",
-                "updated_at",
-            ]
-        )
-
-        return maintenance_request
-
-    # ============================================================
-    # CLOSE REQUEST
-    # ============================================================
-
-    @staticmethod
-    @transaction.atomic
-    def close_request(
-        *,
-        request_instance,
-        manager,
-    ):
-        """
-        Move a RESOLVED request to CLOSED.
-        """
-
-        maintenance_request = (
-            MaintenanceRequest.objects
-            .select_for_update()
-            .select_related(
-                "unit",
-                "unit__property",
-            )
-            .get(
-                pk=request_instance.pk,
-            )
-        )
-
-        MaintenanceService._ensure_manager_owns_request(
-            maintenance_request=maintenance_request,
-            manager=manager,
-        )
-
-        if maintenance_request.status != (
-            MaintenanceStatus.RESOLVED
+        if (
+            actual_cost is not None
+            and actual_cost < 0
         ):
             raise ValidationError(
-                "Only a resolved maintenance request "
-                "can be closed."
+                "Actual cost cannot be negative."
             )
 
         maintenance_request.status = (
-            MaintenanceStatus.CLOSED
+            MaintenanceStatus.COMPLETED
         )
 
+        maintenance_request.completed_at = timezone.now()
+
+        if actual_cost is not None:
+            maintenance_request.actual_cost = actual_cost
+
+        update_fields = [
+            "status",
+            "completed_at",
+            "updated_at",
+        ]
+
+        if actual_cost is not None:
+            update_fields.append(
+                "actual_cost",
+            )
+
         maintenance_request.save(
-            update_fields=[
-                "status",
-                "updated_at",
-            ]
+            update_fields=update_fields,
         )
 
         return maintenance_request
@@ -244,7 +218,7 @@ class MaintenanceService:
         tenant,
     ):
         """
-        Cancel an OPEN maintenance request.
+        Cancel a PENDING maintenance request.
 
         Only the tenant who created the request can cancel it.
         """
@@ -252,9 +226,6 @@ class MaintenanceService:
         maintenance_request = (
             MaintenanceRequest.objects
             .select_for_update()
-            .select_related(
-                "unit",
-            )
             .get(
                 pk=request_instance.pk,
             )
@@ -267,10 +238,10 @@ class MaintenanceService:
             )
 
         if maintenance_request.status != (
-            MaintenanceStatus.OPEN
+            MaintenanceStatus.PENDING
         ):
             raise ValidationError(
-                "Only an open maintenance request "
+                "Only a pending maintenance request "
                 "can be cancelled."
             )
 
@@ -297,6 +268,11 @@ class MaintenanceService:
         maintenance_request,
         manager,
     ):
+        """
+        Ensure that the property manager owns the property
+        associated with the maintenance request.
+        """
+
         if manager.role != UserRole.PROPERTY_MANAGER:
             raise ValidationError(
                 "Only property managers can manage "
@@ -304,7 +280,7 @@ class MaintenanceService:
             )
 
         if (
-            maintenance_request.unit.property.manager_id
+            maintenance_request.property.manager_id
             != manager.id
         ):
             raise ValidationError(
