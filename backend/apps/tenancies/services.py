@@ -37,28 +37,16 @@ class TenancyService:
         - Creating a tenancy creates a notification for the tenant.
         """
 
-        # --------------------------------------------------------
-        # Lock unit
-        # --------------------------------------------------------
-
         unit = Unit.objects.select_for_update().select_related(
             "property",
         ).get(
             pk=unit.pk,
         )
 
-        # --------------------------------------------------------
-        # ACTIVE tenancy validation
-        # --------------------------------------------------------
-
         if status == TenancyStatus.ACTIVE:
             TenancyService._ensure_unit_can_be_activated(
                 unit=unit,
             )
-
-        # --------------------------------------------------------
-        # Create tenancy
-        # --------------------------------------------------------
 
         tenancy = Tenancy.objects.create(
             tenant=tenant,
@@ -71,10 +59,6 @@ class TenancyService:
             notes=notes,
         )
 
-        # --------------------------------------------------------
-        # ACTIVE tenancy occupies the unit
-        # --------------------------------------------------------
-
         if status == TenancyStatus.ACTIVE:
             unit.status = UnitStatus.OCCUPIED
 
@@ -84,10 +68,6 @@ class TenancyService:
                     "updated_at",
                 ]
             )
-
-        # --------------------------------------------------------
-        # Create notification
-        # --------------------------------------------------------
 
         NotificationService.create_notification(
             recipient=tenant,
@@ -99,6 +79,69 @@ class TenancyService:
                 f"{unit.unit_number}."
             ),
         )
+
+        return tenancy
+
+    # ============================================================
+    # UPDATE TENANCY
+    # ============================================================
+
+    @staticmethod
+    @transaction.atomic
+    def update_tenancy(
+        *,
+        tenancy_instance,
+        **validated_data,
+    ):
+        """
+        Update editable tenancy fields.
+
+        Business rules:
+        - Tenancy status cannot be changed here.
+        - Tenant and unit cannot be changed here.
+        - Status changes must use the dedicated workflow endpoints.
+        - The tenancy is locked before updating.
+        - The normal model save() lifecycle is preserved.
+        """
+
+        tenancy = Tenancy.objects.select_for_update().get(
+            pk=tenancy_instance.pk,
+        )
+
+        # --------------------------------------------------------
+        # Protect workflow-controlled fields
+        # --------------------------------------------------------
+
+        protected_fields = {
+            "status",
+            "tenant",
+            "unit",
+        }
+
+        attempted_protected_fields = (
+            protected_fields.intersection(
+                validated_data.keys(),
+            )
+        )
+
+        if attempted_protected_fields:
+            raise ValidationError(
+                "Tenant, unit, and tenancy status "
+                "cannot be changed through the update workflow."
+            )
+
+        # --------------------------------------------------------
+        # Update editable fields
+        # --------------------------------------------------------
+
+        for field, value in validated_data.items():
+            setattr(
+                tenancy,
+                field,
+                value,
+            )
+
+        tenancy.save()
 
         return tenancy
 
@@ -138,10 +181,6 @@ class TenancyService:
             )
         )
 
-        # --------------------------------------------------------
-        # Validate tenancy status
-        # --------------------------------------------------------
-
         if tenancy.status == TenancyStatus.ACTIVE:
             raise ValidationError(
                 "This tenancy is already active."
@@ -157,28 +196,16 @@ class TenancyService:
                 "A cancelled tenancy cannot be activated."
             )
 
-        # --------------------------------------------------------
-        # Lock unit
-        # --------------------------------------------------------
-
         unit = Unit.objects.select_for_update().select_related(
             "property",
         ).get(
             pk=tenancy.unit_id,
         )
 
-        # --------------------------------------------------------
-        # Validate unit
-        # --------------------------------------------------------
-
         TenancyService._ensure_unit_can_be_activated(
             unit=unit,
             exclude_tenancy=tenancy,
         )
-
-        # --------------------------------------------------------
-        # Activate tenancy
-        # --------------------------------------------------------
 
         tenancy.status = TenancyStatus.ACTIVE
 
@@ -189,10 +216,6 @@ class TenancyService:
             ]
         )
 
-        # --------------------------------------------------------
-        # Occupy unit
-        # --------------------------------------------------------
-
         unit.status = UnitStatus.OCCUPIED
 
         unit.save(
@@ -201,10 +224,6 @@ class TenancyService:
                 "updated_at",
             ]
         )
-
-        # --------------------------------------------------------
-        # Create notification
-        # --------------------------------------------------------
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
@@ -253,18 +272,10 @@ class TenancyService:
             )
         )
 
-        # --------------------------------------------------------
-        # Validate tenancy status
-        # --------------------------------------------------------
-
         if tenancy.status != TenancyStatus.ACTIVE:
             raise ValidationError(
                 "Only an active tenancy can be ended."
             )
-
-        # --------------------------------------------------------
-        # Validate end date
-        # --------------------------------------------------------
 
         if end_date < tenancy.start_date:
             raise ValidationError(
@@ -272,19 +283,11 @@ class TenancyService:
                 "start date."
             )
 
-        # --------------------------------------------------------
-        # Lock unit
-        # --------------------------------------------------------
-
         unit = Unit.objects.select_for_update().select_related(
             "property",
         ).get(
             pk=tenancy.unit_id,
         )
-
-        # --------------------------------------------------------
-        # End tenancy
-        # --------------------------------------------------------
 
         tenancy.status = TenancyStatus.ENDED
         tenancy.end_date = end_date
@@ -297,10 +300,6 @@ class TenancyService:
             ]
         )
 
-        # --------------------------------------------------------
-        # Make unit available again
-        # --------------------------------------------------------
-
         unit.status = UnitStatus.AVAILABLE
 
         unit.save(
@@ -309,10 +308,6 @@ class TenancyService:
                 "updated_at",
             ]
         )
-
-        # --------------------------------------------------------
-        # Create notification
-        # --------------------------------------------------------
 
         NotificationService.create_notification(
             recipient=tenancy.tenant,
@@ -349,27 +344,15 @@ class TenancyService:
             status=TenancyStatus.ACTIVE,
         )
 
-        # --------------------------------------------------------
-        # Exclude the current tenancy when activating it
-        # --------------------------------------------------------
-
         if exclude_tenancy is not None:
             active_tenancies = active_tenancies.exclude(
                 pk=exclude_tenancy.pk,
             )
 
-        # --------------------------------------------------------
-        # Prevent multiple ACTIVE tenancies
-        # --------------------------------------------------------
-
         if active_tenancies.exists():
             raise ValidationError(
                 "This unit already has an active tenancy."
             )
-
-        # --------------------------------------------------------
-        # Unit must be available
-        # --------------------------------------------------------
 
         if unit.status != UnitStatus.AVAILABLE:
             raise ValidationError(

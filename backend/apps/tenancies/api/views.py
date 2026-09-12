@@ -55,25 +55,13 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             "unit__property__manager",
         )
 
-        # --------------------------------------------------------
-        # Staff
-        # --------------------------------------------------------
-
         if user.is_staff:
             return queryset
-
-        # --------------------------------------------------------
-        # Property manager
-        # --------------------------------------------------------
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
-
-        # --------------------------------------------------------
-        # Tenant
-        # --------------------------------------------------------
 
         if user.role == UserRole.TENANT:
             return queryset.filter(
@@ -86,10 +74,6 @@ class TenancyListCreateView(generics.ListCreateAPIView):
         unit_id = self.request.data.get("unit")
         tenant_id = self.request.data.get("tenant")
 
-        # --------------------------------------------------------
-        # Validate unit ID
-        # --------------------------------------------------------
-
         if not unit_id:
             raise serializers.ValidationError(
                 {
@@ -99,10 +83,6 @@ class TenancyListCreateView(generics.ListCreateAPIView):
                     )
                 }
             )
-
-        # --------------------------------------------------------
-        # Validate tenant ID
-        # --------------------------------------------------------
 
         if not tenant_id:
             raise serializers.ValidationError(
@@ -114,11 +94,6 @@ class TenancyListCreateView(generics.ListCreateAPIView):
                 }
             )
 
-        # --------------------------------------------------------
-        # Property manager can only use their own active
-        # properties.
-        # --------------------------------------------------------
-
         unit = get_object_or_404(
             Unit.objects.select_related(
                 "property",
@@ -129,10 +104,6 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             pk=unit_id,
         )
 
-        # --------------------------------------------------------
-        # Tenant must actually have TENANT role.
-        # --------------------------------------------------------
-
         tenant = get_object_or_404(
             User.objects.filter(
                 pk=tenant_id,
@@ -140,10 +111,6 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             ),
             pk=tenant_id,
         )
-
-        # --------------------------------------------------------
-        # Creation goes through the service layer.
-        # --------------------------------------------------------
 
         TenancyService.create_tenancy(
             tenant=tenant,
@@ -195,25 +162,13 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
             "unit__property__manager",
         )
 
-        # --------------------------------------------------------
-        # Staff
-        # --------------------------------------------------------
-
         if user.is_staff:
             return queryset
-
-        # --------------------------------------------------------
-        # Property manager
-        # --------------------------------------------------------
 
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
-
-        # --------------------------------------------------------
-        # Tenant
-        # --------------------------------------------------------
 
         if user.role == UserRole.TENANT:
             return queryset.filter(
@@ -240,14 +195,21 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
             )
 
         # --------------------------------------------------------
-        # Update non-status fields.
+        # Update through service layer.
         # --------------------------------------------------------
 
-        Tenancy.objects.filter(
-            pk=tenancy.pk,
-        ).update(
-            **serializer.validated_data,
-        )
+        try:
+            TenancyService.update_tenancy(
+                tenancy_instance=tenancy,
+                **serializer.validated_data,
+            )
+
+        except ValidationError as exc:
+            raise serializers.ValidationError(
+                {
+                    "detail": exc.messages,
+                }
+            )
 
 
 # ============================================================
@@ -284,10 +246,6 @@ class TenancyActivateView(generics.GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         tenancy = self.get_object()
-
-        # --------------------------------------------------------
-        # Run activation through service workflow.
-        # --------------------------------------------------------
 
         try:
             tenancy = TenancyService.activate_tenancy(
@@ -342,10 +300,6 @@ class TenancyEndView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         tenancy = self.get_object()
 
-        # --------------------------------------------------------
-        # End date is required.
-        # --------------------------------------------------------
-
         end_date = request.data.get("end_date")
 
         if not end_date:
@@ -354,10 +308,6 @@ class TenancyEndView(generics.GenericAPIView):
                     "end_date": "End date is required."
                 }
             )
-
-        # --------------------------------------------------------
-        # Parse date.
-        # --------------------------------------------------------
 
         try:
             parsed_end_date = date.fromisoformat(
@@ -373,10 +323,6 @@ class TenancyEndView(generics.GenericAPIView):
                     )
                 }
             )
-
-        # --------------------------------------------------------
-        # Run ending workflow through service.
-        # --------------------------------------------------------
 
         try:
             tenancy = TenancyService.end_tenancy(

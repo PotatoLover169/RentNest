@@ -63,6 +63,10 @@ class TenancyServiceTests(TestCase):
             status=UnitStatus.AVAILABLE,
         )
 
+    # ============================================================
+    # CREATE
+    # ============================================================
+
     def test_create_pending_tenancy(self):
         tenancy = TenancyService.create_tenancy(
             tenant=self.tenant,
@@ -134,6 +138,124 @@ class TenancyServiceTests(TestCase):
             1,
         )
 
+    # ============================================================
+    # UPDATE
+    # ============================================================
+
+    def test_update_tenancy(self):
+        tenancy = TenancyService.create_tenancy(
+            tenant=self.tenant,
+            unit=self.unit,
+            start_date=date(2026, 8, 1),
+            monthly_rent=Decimal("15000.00"),
+            security_deposit=Decimal("15000.00"),
+        )
+
+        original_updated_at = tenancy.updated_at
+
+        tenancy = TenancyService.update_tenancy(
+            tenancy_instance=tenancy,
+            monthly_rent=Decimal("16000.00"),
+            notes="Rent updated.",
+        )
+
+        tenancy.refresh_from_db()
+
+        self.assertEqual(
+            tenancy.monthly_rent,
+            Decimal("16000.00"),
+        )
+
+        self.assertEqual(
+            tenancy.notes,
+            "Rent updated.",
+        )
+
+        self.assertGreater(
+            tenancy.updated_at,
+            original_updated_at,
+        )
+
+    def test_update_tenancy_cannot_change_status(self):
+        tenancy = TenancyService.create_tenancy(
+            tenant=self.tenant,
+            unit=self.unit,
+            start_date=date(2026, 8, 1),
+            monthly_rent=Decimal("15000.00"),
+            security_deposit=Decimal("15000.00"),
+        )
+
+        with self.assertRaises(ValidationError):
+            TenancyService.update_tenancy(
+                tenancy_instance=tenancy,
+                status=TenancyStatus.ACTIVE,
+            )
+
+        tenancy.refresh_from_db()
+
+        self.assertEqual(
+            tenancy.status,
+            TenancyStatus.PENDING,
+        )
+
+    def test_update_tenancy_cannot_change_tenant(self):
+        tenancy = TenancyService.create_tenancy(
+            tenant=self.tenant,
+            unit=self.unit,
+            start_date=date(2026, 8, 1),
+            monthly_rent=Decimal("15000.00"),
+            security_deposit=Decimal("15000.00"),
+        )
+
+        with self.assertRaises(ValidationError):
+            TenancyService.update_tenancy(
+                tenancy_instance=tenancy,
+                tenant=self.second_tenant,
+            )
+
+        tenancy.refresh_from_db()
+
+        self.assertEqual(
+            tenancy.tenant,
+            self.tenant,
+        )
+
+    def test_update_tenancy_cannot_change_unit(self):
+        second_unit = Unit.objects.create(
+            property=self.property,
+            unit_number="102",
+            unit_type=UnitType.ONE_BEDROOM,
+            bedrooms=1,
+            bathrooms=Decimal("1.0"),
+            monthly_rent=Decimal("16000.00"),
+            status=UnitStatus.AVAILABLE,
+        )
+
+        tenancy = TenancyService.create_tenancy(
+            tenant=self.tenant,
+            unit=self.unit,
+            start_date=date(2026, 8, 1),
+            monthly_rent=Decimal("15000.00"),
+            security_deposit=Decimal("15000.00"),
+        )
+
+        with self.assertRaises(ValidationError):
+            TenancyService.update_tenancy(
+                tenancy_instance=tenancy,
+                unit=second_unit,
+            )
+
+        tenancy.refresh_from_db()
+
+        self.assertEqual(
+            tenancy.unit,
+            self.unit,
+        )
+
+    # ============================================================
+    # ACTIVATION
+    # ============================================================
+
     def test_activate_pending_tenancy_makes_unit_occupied(self):
         tenancy = TenancyService.create_tenancy(
             tenant=self.tenant,
@@ -203,6 +325,10 @@ class TenancyServiceTests(TestCase):
             ).count(),
             1,
         )
+
+    # ============================================================
+    # END
+    # ============================================================
 
     def test_end_active_tenancy_makes_unit_available(self):
         tenancy = TenancyService.create_tenancy(
