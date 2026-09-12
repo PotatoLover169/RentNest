@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.properties.models import (
@@ -173,7 +174,7 @@ class UnitServiceTests(TestCase):
             "Recently renovated.",
         )
 
-    def test_change_unit_status(self):
+    def test_change_unit_status_to_maintenance(self):
         unit = UnitService.create_unit(
             property_instance=self.property,
             unit_number="101",
@@ -183,14 +184,80 @@ class UnitServiceTests(TestCase):
 
         UnitService.change_status(
             unit_instance=unit,
-            status=UnitStatus.OCCUPIED,
+            status=UnitStatus.MAINTENANCE,
         )
 
         unit.refresh_from_db()
 
         self.assertEqual(
             unit.status,
+            UnitStatus.MAINTENANCE,
+        )
+
+    def test_cannot_manually_change_unit_to_occupied(self):
+        unit = UnitService.create_unit(
+            property_instance=self.property,
+            unit_number="101",
+            unit_type=UnitType.ONE_BEDROOM,
+            monthly_rent=Decimal("15000.00"),
+        )
+
+        with self.assertRaises(ValidationError):
+            UnitService.change_status(
+                unit_instance=unit,
+                status=UnitStatus.OCCUPIED,
+            )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(
+            unit.status,
+            UnitStatus.AVAILABLE,
+        )
+
+    def test_cannot_manually_change_occupied_unit(self):
+        unit = UnitService.create_unit(
+            property_instance=self.property,
+            unit_number="101",
+            unit_type=UnitType.ONE_BEDROOM,
+            monthly_rent=Decimal("15000.00"),
+        )
+
+        unit.status = UnitStatus.OCCUPIED
+        unit.save()
+
+        with self.assertRaises(ValidationError):
+            UnitService.change_status(
+                unit_instance=unit,
+                status=UnitStatus.AVAILABLE,
+            )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(
+            unit.status,
             UnitStatus.OCCUPIED,
+        )
+
+    def test_cannot_manually_change_unit_to_inactive(self):
+        unit = UnitService.create_unit(
+            property_instance=self.property,
+            unit_number="101",
+            unit_type=UnitType.ONE_BEDROOM,
+            monthly_rent=Decimal("15000.00"),
+        )
+
+        with self.assertRaises(ValidationError):
+            UnitService.change_status(
+                unit_instance=unit,
+                status=UnitStatus.INACTIVE,
+            )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(
+            unit.status,
+            UnitStatus.AVAILABLE,
         )
 
     def test_deactivate_unit(self):
@@ -210,4 +277,27 @@ class UnitServiceTests(TestCase):
         self.assertEqual(
             unit.status,
             UnitStatus.INACTIVE,
+        )
+
+    def test_cannot_deactivate_occupied_unit(self):
+        unit = UnitService.create_unit(
+            property_instance=self.property,
+            unit_number="101",
+            unit_type=UnitType.ONE_BEDROOM,
+            monthly_rent=Decimal("15000.00"),
+        )
+
+        unit.status = UnitStatus.OCCUPIED
+        unit.save()
+
+        with self.assertRaises(ValidationError):
+            UnitService.deactivate_unit(
+                unit_instance=unit,
+            )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(
+            unit.status,
+            UnitStatus.OCCUPIED,
         )

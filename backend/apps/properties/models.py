@@ -93,6 +93,7 @@ class Property(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(
                 fields=["manager", "status"],
@@ -111,7 +112,7 @@ class Property(models.Model):
 class Unit(models.Model):
     property = models.ForeignKey(
         Property,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="units",
     )
 

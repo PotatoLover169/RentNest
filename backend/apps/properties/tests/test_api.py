@@ -202,10 +202,10 @@ class PropertyAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        property_ids = {
+        property_ids = [
             item["id"]
-            for item in response.data
-        }
+            for item in response.data["results"]
+        ]
 
         self.assertIn(
             self.property.id,
@@ -231,10 +231,10 @@ class PropertyAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        property_ids = {
+        property_ids = [
             item["id"]
-            for item in response.data
-        }
+            for item in response.data["results"]
+        ]
 
         self.assertIn(
             self.property.id,

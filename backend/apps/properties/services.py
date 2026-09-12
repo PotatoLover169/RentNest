@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .models import (
@@ -113,16 +114,59 @@ class UnitService:
         unit_instance,
         status,
     ):
-        unit_instance.status = status
+        """
+        Safely change a unit's operational status.
 
-        unit_instance.save(
+        Business rules:
+        - OCCUPIED is controlled by the tenancy workflow.
+        - INACTIVE is controlled by deactivate_unit().
+        - AVAILABLE and MAINTENANCE may be changed manually.
+        - An occupied unit cannot be manually changed to another status.
+        """
+
+        unit = (
+            Unit.objects
+            .select_for_update()
+            .get(pk=unit_instance.pk)
+        )
+
+        valid_statuses = {
+            choice[0]
+            for choice in UnitStatus.choices
+        }
+
+        if status not in valid_statuses:
+            raise ValidationError(
+                "Invalid unit status."
+            )
+
+        if status == UnitStatus.INACTIVE:
+            raise ValidationError(
+                "Use the unit deactivation workflow "
+                "to deactivate a unit."
+            )
+
+        if status == UnitStatus.OCCUPIED:
+            raise ValidationError(
+                "A unit becomes occupied through an active tenancy."
+            )
+
+        if unit.status == UnitStatus.OCCUPIED:
+            raise ValidationError(
+                "An occupied unit cannot have its status changed "
+                "manually. End the active tenancy first."
+            )
+
+        unit.status = status
+
+        unit.save(
             update_fields=[
                 "status",
                 "updated_at",
             ]
         )
 
-        return unit_instance
+        return unit
 
     @staticmethod
     @transaction.atomic
@@ -130,13 +174,25 @@ class UnitService:
         *,
         unit_instance,
     ):
-        unit_instance.status = UnitStatus.INACTIVE
+        unit = (
+            Unit.objects
+            .select_for_update()
+            .get(pk=unit_instance.pk)
+        )
 
-        unit_instance.save(
+        if unit.status == UnitStatus.OCCUPIED:
+            raise ValidationError(
+                "An occupied unit cannot be deactivated. "
+                "End the active tenancy first."
+            )
+
+        unit.status = UnitStatus.INACTIVE
+
+        unit.save(
             update_fields=[
                 "status",
                 "updated_at",
             ]
         )
 
-        return unit_instance
+        return unit

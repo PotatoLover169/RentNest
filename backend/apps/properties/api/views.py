@@ -268,6 +268,9 @@ class UnitStatusView(generics.GenericAPIView):
 
     Only the property manager responsible for the
     property can change its status.
+
+    OCCUPIED and INACTIVE are controlled by their
+    respective domain workflows.
     """
 
     permission_classes = [
@@ -295,22 +298,17 @@ class UnitStatusView(generics.GenericAPIView):
 
         new_status = request.data.get("status")
 
-        valid_statuses = {
-            choice[0]
-            for choice in UnitStatus.choices
-        }
-
-        if new_status not in valid_statuses:
+        try:
+            unit_instance = UnitService.change_status(
+                unit_instance=unit_instance,
+                status=new_status,
+            )
+        except ValidationError as exc:
             raise ValidationError(
                 {
-                    "status": "Invalid unit status.",
+                    "status": exc.messages,
                 }
             )
-
-        UnitService.change_status(
-            unit_instance=unit_instance,
-            status=new_status,
-        )
 
         return Response(
             UnitSerializer(unit_instance).data,
@@ -348,9 +346,16 @@ class UnitDeactivateView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         unit_instance = self.get_object()
 
-        UnitService.deactivate_unit(
-            unit_instance=unit_instance,
-        )
+        try:
+            unit_instance = UnitService.deactivate_unit(
+                unit_instance=unit_instance,
+            )
+        except ValidationError as exc:
+            raise ValidationError(
+                {
+                    "status": exc.messages,
+                }
+            )
 
         return Response(
             UnitSerializer(unit_instance).data,
