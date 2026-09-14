@@ -13,10 +13,10 @@ from rest_framework import (
 from rest_framework.response import Response
 
 from apps.accounts.models import User, UserRole
+from apps.accounts.permissions import IsAdminOrPropertyManager
 from apps.properties.models import PropertyStatus, Unit
-from apps.properties.permissions import IsPropertyManager
 
-from apps.tenancies.models import Tenancy, TenancyStatus
+from apps.tenancies.models import Tenancy
 from apps.tenancies.services import TenancyService
 
 from .serializers import TenancySerializer
@@ -29,8 +29,14 @@ from .serializers import TenancySerializer
 
 class TenancyListCreateView(generics.ListCreateAPIView):
     """
-    List accessible tenancies and create tenancies
-    for units managed by the authenticated property manager.
+    List accessible tenancies and create tenancies.
+
+    Authorization:
+    - ADMIN can access all tenancies and create any tenancy.
+    - PROPERTY_MANAGER can access tenancies for their properties
+      and create tenancies only for units they manage.
+    - TENANT can access only their own tenancies.
+    - TENANT cannot create tenancies.
     """
 
     serializer_class = TenancySerializer
@@ -38,7 +44,7 @@ class TenancyListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [
-                IsPropertyManager(),
+                IsAdminOrPropertyManager(),
             ]
 
         return [
@@ -55,14 +61,23 @@ class TenancyListCreateView(generics.ListCreateAPIView):
             "unit__property__manager",
         )
 
-        if user.is_staff:
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
 
+        # ------------------------------------------------------
+        # TENANT
+        # ------------------------------------------------------
         if user.role == UserRole.TENANT:
             return queryset.filter(
                 tenant=user,
@@ -71,8 +86,15 @@ class TenancyListCreateView(generics.ListCreateAPIView):
         return queryset.none()
 
     def perform_create(self, serializer):
-        unit_id = self.request.data.get("unit")
-        tenant_id = self.request.data.get("tenant")
+        user = self.request.user
+
+        unit_id = self.request.data.get(
+            "unit",
+        )
+
+        tenant_id = self.request.data.get(
+            "tenant",
+        )
 
         if not unit_id:
             raise serializers.ValidationError(
@@ -94,16 +116,34 @@ class TenancyListCreateView(generics.ListCreateAPIView):
                 }
             )
 
-        unit = get_object_or_404(
-            Unit.objects.select_related(
-                "property",
-            ).filter(
-                property__manager=self.request.user,
-                property__status=PropertyStatus.ACTIVE,
-            ),
-            pk=unit_id,
-        )
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
+            unit = get_object_or_404(
+                Unit.objects.select_related(
+                    "property",
+                ),
+                pk=unit_id,
+            )
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
+        else:
+            unit = get_object_or_404(
+                Unit.objects.select_related(
+                    "property",
+                ).filter(
+                    property__manager=user,
+                    property__status=PropertyStatus.ACTIVE,
+                ),
+                pk=unit_id,
+            )
+
+        # ------------------------------------------------------
+        # TENANT ACCOUNT
+        # ------------------------------------------------------
         tenant = get_object_or_404(
             User.objects.filter(
                 pk=tenant_id,
@@ -128,13 +168,13 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a tenancy.
 
-    Property managers can only modify tenancies belonging
-    to units they manage.
-
-    Tenants can view their own tenancies.
-
-    Tenancy status cannot be changed through PUT/PATCH.
-    Status changes must use the workflow endpoints.
+    Authorization:
+    - ADMIN can access any tenancy.
+    - PROPERTY_MANAGER can access tenancies for their properties.
+    - TENANT can retrieve only their own tenancy.
+    - Only ADMIN and PROPERTY_MANAGER can update.
+    - TENANT cannot update.
+    - Tenant, unit, and status cannot be changed through PUT/PATCH.
     """
 
     serializer_class = TenancySerializer
@@ -145,7 +185,7 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
             "PATCH",
         ):
             return [
-                IsPropertyManager(),
+                IsAdminOrPropertyManager(),
             ]
 
         return [
@@ -162,14 +202,23 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
             "unit__property__manager",
         )
 
-        if user.is_staff:
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 unit__property__manager=user,
             )
 
+        # ------------------------------------------------------
+        # TENANT
+        # ------------------------------------------------------
         if user.role == UserRole.TENANT:
             return queryset.filter(
                 tenant=user,
@@ -180,9 +229,9 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         tenancy = self.get_object()
 
-        # --------------------------------------------------------
-        # Status changes must go through service workflows.
-        # --------------------------------------------------------
+        # ------------------------------------------------------
+        # Status changes must use workflow endpoints.
+        # ------------------------------------------------------
 
         if "status" in serializer.validated_data:
             raise serializers.ValidationError(
@@ -194,9 +243,9 @@ class TenancyDetailView(generics.RetrieveUpdateAPIView):
                 }
             )
 
-        # --------------------------------------------------------
+        # ------------------------------------------------------
         # Update through service layer.
-        # --------------------------------------------------------
+        # ------------------------------------------------------
 
         try:
             TenancyService.update_tenancy(
@@ -221,21 +270,34 @@ class TenancyActivateView(generics.GenericAPIView):
     """
     Activate a pending tenancy.
 
+    Authorization:
+    - ADMIN can activate any tenancy.
+    - PROPERTY_MANAGER can activate tenancies for their
+      own properties.
+    - TENANT cannot activate a tenancy.
+
     Business rules are enforced by TenancyService.
     """
 
     permission_classes = [
-        IsPropertyManager,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = TenancySerializer
 
     def get_queryset(self):
-        return Tenancy.objects.select_related(
+        user = self.request.user
+
+        queryset = Tenancy.objects.select_related(
             "unit",
             "unit__property",
-        ).filter(
-            unit__property__manager=self.request.user,
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            unit__property__manager=user,
         )
 
     def get_object(self):
@@ -274,21 +336,34 @@ class TenancyEndView(generics.GenericAPIView):
     """
     End an active tenancy.
 
+    Authorization:
+    - ADMIN can end any tenancy.
+    - PROPERTY_MANAGER can end tenancies for their
+      own properties.
+    - TENANT cannot end a tenancy.
+
     The unit becomes AVAILABLE through the service workflow.
     """
 
     permission_classes = [
-        IsPropertyManager,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = TenancySerializer
 
     def get_queryset(self):
-        return Tenancy.objects.select_related(
+        user = self.request.user
+
+        queryset = Tenancy.objects.select_related(
             "unit",
             "unit__property",
-        ).filter(
-            unit__property__manager=self.request.user,
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            unit__property__manager=user,
         )
 
     def get_object(self):
@@ -300,7 +375,9 @@ class TenancyEndView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         tenancy = self.get_object()
 
-        end_date = request.data.get("end_date")
+        end_date = request.data.get(
+            "end_date",
+        )
 
         if not end_date:
             raise serializers.ValidationError(
