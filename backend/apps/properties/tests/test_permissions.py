@@ -42,6 +42,14 @@ class PropertyPermissionTests(TestCase):
             role="TENANT",
         )
 
+        self.admin = User.objects.create_user(
+            email="admin@example.com",
+            password="StrongPassword123!",
+            first_name="System",
+            last_name="Administrator",
+            role="ADMIN",
+        )
+
         self.property = Property.objects.create(
             manager=self.manager,
             name="Sunrise Residences",
@@ -167,6 +175,43 @@ class PropertyPermissionTests(TestCase):
         request = self.factory.get("/")
 
         request.user = self.tenant
+
+        permission = IsPropertyManagerOrReadOnly()
+
+        self.assertTrue(
+            permission.has_object_permission(
+                request,
+                None,
+                self.property,
+            )
+        )
+
+    def test_admin_can_modify_any_property(self):
+        request = self.factory.patch("/")
+
+        request.user = self.admin
+
+        permission = IsPropertyManagerOrReadOnly()
+
+        self.assertTrue(
+            permission.has_permission(
+                request,
+                None,
+            )
+        )
+
+        self.assertTrue(
+            permission.has_object_permission(
+                request,
+                None,
+                self.property,
+            )
+        )
+
+    def test_admin_can_read_any_property(self):
+        request = self.factory.get("/")
+
+        request.user = self.admin
 
         permission = IsPropertyManagerOrReadOnly()
 

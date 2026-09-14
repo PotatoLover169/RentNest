@@ -5,16 +5,16 @@ from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from apps.accounts.models import UserRole
+from apps.accounts.permissions import IsAdminOrPropertyManager
+
 from apps.properties.models import (
     Property,
     PropertyStatus,
     Unit,
     UnitStatus,
 )
-from apps.properties.permissions import (
-    IsPropertyManager,
-    IsPropertyManagerOrReadOnly,
-)
+from apps.properties.permissions import IsPropertyManagerOrReadOnly
 from apps.properties.services import (
     PropertyService,
     UnitService,
@@ -30,19 +30,13 @@ from .serializers import (
 # PROPERTY API
 # ============================================================
 
-
 class PropertyListCreateView(generics.ListCreateAPIView):
-    """
-    List properties accessible to the authenticated user
-    and create properties for the authenticated property manager.
-    """
-
     serializer_class = PropertySerializer
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [
-                IsPropertyManager(),
+                IsPropertyManagerOrReadOnly(),
             ]
 
         return [
@@ -52,10 +46,10 @@ class PropertyListCreateView(generics.ListCreateAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return Property.objects.all()
 
-        if user.role == "PROPERTY_MANAGER":
+        if user.role == UserRole.PROPERTY_MANAGER:
             return Property.objects.filter(
                 manager=user,
             )
@@ -65,19 +59,69 @@ class PropertyListCreateView(generics.ListCreateAPIView):
         )
 
     def perform_create(self, serializer):
-        PropertyService.create_property(
-            manager=self.request.user,
-            **serializer.validated_data,
+        user = self.request.user
+
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
+            manager = serializer.validated_data.get(
+                "manager",
+            )
+
+            if manager is None:
+                raise ValidationError(
+                    {
+                        "manager_id": (
+                            "A property manager is required "
+                            "when an administrator creates "
+                            "a property."
+                        )
+                    }
+                )
+
+            PropertyService.create_property(
+                manager=manager,
+                **{
+                    key: value
+                    for key, value in serializer.validated_data.items()
+                    if key != "manager"
+                },
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
+        if user.role == UserRole.PROPERTY_MANAGER:
+            if "manager" in serializer.validated_data:
+                raise ValidationError(
+                    {
+                        "manager_id": (
+                            "Property managers cannot assign "
+                            "properties to another manager."
+                        )
+                    }
+                )
+
+            PropertyService.create_property(
+                manager=user,
+                **serializer.validated_data,
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # ALL OTHER ROLES
+        # ------------------------------------------------------
+        raise ValidationError(
+            "Only administrators and property managers "
+            "can create properties."
         )
 
 
 class PropertyDetailView(generics.RetrieveUpdateAPIView):
-    """
-    Retrieve and update a property.
-
-    Property managers can only modify properties they manage.
-    """
-
     serializer_class = PropertySerializer
 
     def get_permissions(self):
@@ -88,10 +132,10 @@ class PropertyDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return Property.objects.all()
 
-        if user.role == "PROPERTY_MANAGER":
+        if user.role == UserRole.PROPERTY_MANAGER:
             return Property.objects.filter(
                 manager=user,
             )
@@ -101,6 +145,16 @@ class PropertyDetailView(generics.RetrieveUpdateAPIView):
         )
 
     def perform_update(self, serializer):
+        if "manager" in serializer.validated_data:
+            raise ValidationError(
+                {
+                    "manager_id": (
+                        "The property manager cannot be changed "
+                        "through the property update workflow."
+                    )
+                }
+            )
+
         PropertyService.update_property(
             property_instance=self.get_object(),
             **serializer.validated_data,
@@ -108,22 +162,25 @@ class PropertyDetailView(generics.RetrieveUpdateAPIView):
 
 
 class PropertyDeactivateView(generics.GenericAPIView):
-    """
-    Deactivate a property instead of permanently deleting it.
-
-    This preserves historical rental/property data.
-    """
-
-    permission_classes = [
-        IsPropertyManager,
-    ]
-
     serializer_class = PropertySerializer
 
+    def get_permissions(self):
+        return [
+            IsAdminOrPropertyManager(),
+        ]
+
     def get_queryset(self) -> QuerySet:
-        return Property.objects.filter(
-            manager=self.request.user,
-        )
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Property.objects.all()
+
+        if user.role == UserRole.PROPERTY_MANAGER:
+            return Property.objects.filter(
+                manager=user,
+            )
+
+        return Property.objects.none()
 
     def get_object(self):
         return get_object_or_404(
@@ -134,9 +191,16 @@ class PropertyDeactivateView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         property_instance = self.get_object()
 
-        PropertyService.deactivate_property(
-            property_instance=property_instance,
-        )
+        try:
+            property_instance = PropertyService.deactivate_property(
+                property_instance=property_instance,
+            )
+        except ValidationError as exc:
+            raise ValidationError(
+                {
+                    "status": exc.messages,
+                }
+            )
 
         return Response(
             PropertySerializer(property_instance).data,
@@ -148,20 +212,13 @@ class PropertyDeactivateView(generics.GenericAPIView):
 # UNIT API
 # ============================================================
 
-
 class UnitListCreateView(generics.ListCreateAPIView):
-    """
-    List units accessible to the authenticated user
-    and create units for properties managed by the
-    authenticated property manager.
-    """
-
     serializer_class = UnitSerializer
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [
-                IsPropertyManager(),
+                IsAdminOrPropertyManager(),
             ]
 
         return [
@@ -176,10 +233,10 @@ class UnitListCreateView(generics.ListCreateAPIView):
             "property__manager",
         )
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return queryset
 
-        if user.role == "PROPERTY_MANAGER":
+        if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 property__manager=user,
             )
@@ -190,7 +247,11 @@ class UnitListCreateView(generics.ListCreateAPIView):
         )
 
     def perform_create(self, serializer):
-        property_id = self.request.data.get("property")
+        user = self.request.user
+
+        property_id = self.request.data.get(
+            "property",
+        )
 
         if not property_id:
             raise ValidationError(
@@ -201,12 +262,25 @@ class UnitListCreateView(generics.ListCreateAPIView):
                 }
             )
 
-        property_instance = get_object_or_404(
-            Property.objects.filter(
-                manager=self.request.user,
-            ),
-            pk=property_id,
-        )
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
+            property_instance = get_object_or_404(
+                Property.objects.all(),
+                pk=property_id,
+            )
+
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
+        else:
+            property_instance = get_object_or_404(
+                Property.objects.filter(
+                    manager=user,
+                ),
+                pk=property_id,
+            )
 
         UnitService.create_unit(
             property_instance=property_instance,
@@ -215,19 +289,12 @@ class UnitListCreateView(generics.ListCreateAPIView):
 
 
 class UnitDetailView(generics.RetrieveUpdateAPIView):
-    """
-    Retrieve or update a unit.
-
-    Property managers can only modify units belonging
-    to properties they manage.
-    """
-
     serializer_class = UnitSerializer
 
     def get_permissions(self):
         if self.request.method in ["PUT", "PATCH"]:
             return [
-                IsPropertyManager(),
+                IsAdminOrPropertyManager(),
             ]
 
         return [
@@ -242,10 +309,10 @@ class UnitDetailView(generics.RetrieveUpdateAPIView):
             "property__manager",
         )
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return queryset
 
-        if user.role == "PROPERTY_MANAGER":
+        if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 property__manager=user,
             )
@@ -263,29 +330,31 @@ class UnitDetailView(generics.RetrieveUpdateAPIView):
 
 
 class UnitStatusView(generics.GenericAPIView):
-    """
-    Change the operational status of a unit.
-
-    Only the property manager responsible for the
-    property can change its status.
-
-    OCCUPIED and INACTIVE are controlled by their
-    respective domain workflows.
-    """
-
-    permission_classes = [
-        IsPropertyManager,
-    ]
-
     serializer_class = UnitSerializer
 
+    def get_permissions(self):
+        return [
+            IsAdminOrPropertyManager(),
+        ]
+
     def get_queryset(self) -> QuerySet:
-        return Unit.objects.select_related(
-            "property",
-            "property__manager",
-        ).filter(
-            property__manager=self.request.user,
-        )
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Unit.objects.select_related(
+                "property",
+                "property__manager",
+            )
+
+        if user.role == UserRole.PROPERTY_MANAGER:
+            return Unit.objects.select_related(
+                "property",
+                "property__manager",
+            ).filter(
+                property__manager=user,
+            )
+
+        return Unit.objects.none()
 
     def get_object(self):
         return get_object_or_404(
@@ -296,7 +365,9 @@ class UnitStatusView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         unit_instance = self.get_object()
 
-        new_status = request.data.get("status")
+        new_status = request.data.get(
+            "status",
+        )
 
         try:
             unit_instance = UnitService.change_status(
@@ -317,25 +388,31 @@ class UnitStatusView(generics.GenericAPIView):
 
 
 class UnitDeactivateView(generics.GenericAPIView):
-    """
-    Deactivate a unit instead of deleting it.
-
-    Historical rental/property data is preserved.
-    """
-
-    permission_classes = [
-        IsPropertyManager,
-    ]
-
     serializer_class = UnitSerializer
 
+    def get_permissions(self):
+        return [
+            IsAdminOrPropertyManager(),
+        ]
+
     def get_queryset(self) -> QuerySet:
-        return Unit.objects.select_related(
-            "property",
-            "property__manager",
-        ).filter(
-            property__manager=self.request.user,
-        )
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN:
+            return Unit.objects.select_related(
+                "property",
+                "property__manager",
+            )
+
+        if user.role == UserRole.PROPERTY_MANAGER:
+            return Unit.objects.select_related(
+                "property",
+                "property__manager",
+            ).filter(
+                property__manager=user,
+            )
+
+        return Unit.objects.none()
 
     def get_object(self):
         return get_object_or_404(

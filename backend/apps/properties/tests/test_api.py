@@ -18,9 +18,12 @@ class PropertyAPITests(APITestCase):
     Covers:
     - authentication
     - role-based access
+    - administrator access
     - property ownership
     - property visibility
+    - property creation
     - property updates
+    - protected manager assignment
     - safe property deactivation
     """
 
@@ -47,6 +50,14 @@ class PropertyAPITests(APITestCase):
             first_name="John",
             last_name="Tenant",
             role=UserRole.TENANT,
+        )
+
+        self.admin = User.objects.create_user(
+            email="admin@example.com",
+            password="StrongPassword123!",
+            first_name="System",
+            last_name="Administrator",
+            role=UserRole.ADMIN,
         )
 
         self.property = Property.objects.create(
@@ -181,6 +192,100 @@ class PropertyAPITests(APITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    def test_property_manager_cannot_assign_another_manager_when_creating_property(
+        self,
+    ):
+        self.client.force_authenticate(
+            user=self.manager,
+        )
+
+        response = self.client.post(
+            self.property_list_url(),
+            {
+                "manager_id": self.other_manager.id,
+                "name": "Unauthorized Manager Assignment",
+                "property_type": PropertyType.APARTMENT,
+                "description": "This should not be created.",
+                "address_line": "20 Unauthorized Street",
+                "city": "Cebu City",
+                "province": "Cebu",
+                "postal_code": "6000",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertFalse(
+            Property.objects.filter(
+                name="Unauthorized Manager Assignment",
+            ).exists()
+        )
+
+    def test_admin_can_create_property_for_property_manager(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.post(
+            self.property_list_url(),
+            {
+                "manager_id": self.manager.id,
+                "name": "Admin Created Property",
+                "property_type": PropertyType.APARTMENT,
+                "description": "Created by an administrator.",
+                "address_line": "100 Admin Street",
+                "city": "Cebu City",
+                "province": "Cebu",
+                "postal_code": "6000",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.assertTrue(
+            Property.objects.filter(
+                name="Admin Created Property",
+                manager=self.manager,
+            ).exists()
+        )
+
+    def test_admin_cannot_create_property_without_manager(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.post(
+            self.property_list_url(),
+            {
+                "name": "Missing Manager Property",
+                "property_type": PropertyType.APARTMENT,
+                "description": "This should fail.",
+                "address_line": "100 Missing Manager Street",
+                "city": "Cebu City",
+                "province": "Cebu",
+                "postal_code": "6000",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.assertIn(
+            "manager_id",
+            response.data,
+        )
+
     # ==========================================================
     # PROPERTY LIST / OWNERSHIP
     # ==========================================================
@@ -243,6 +348,40 @@ class PropertyAPITests(APITestCase):
             property_ids,
         )
 
+    def test_admin_can_list_all_properties(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.get(
+            self.property_list_url(),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        property_ids = [
+            item["id"]
+            for item in response.data["results"]
+        ]
+
+        self.assertIn(
+            self.property.id,
+            property_ids,
+        )
+
+        self.assertIn(
+            self.other_property.id,
+            property_ids,
+        )
+
+        self.assertIn(
+            self.inactive_property.id,
+            property_ids,
+        )
+
     # ==========================================================
     # PROPERTY RETRIEVAL
     # ==========================================================
@@ -282,6 +421,27 @@ class PropertyAPITests(APITestCase):
         self.assertEqual(
             response.status_code,
             status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_admin_can_retrieve_any_property(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.get(
+            self.property_detail_url(
+                self.other_property.id,
+            ),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["id"],
+            self.other_property.id,
         )
 
     # ==========================================================
@@ -335,6 +495,60 @@ class PropertyAPITests(APITestCase):
             status.HTTP_404_NOT_FOUND,
         )
 
+    def test_admin_can_update_any_property(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.patch(
+            self.property_detail_url(
+                self.other_property.id,
+            ),
+            {
+                "name": "Admin Updated Property",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.other_property.refresh_from_db()
+
+        self.assertEqual(
+            self.other_property.name,
+            "Admin Updated Property",
+        )
+
+    def test_admin_cannot_change_property_manager_through_update(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.patch(
+            self.property_detail_url(
+                self.property.id,
+            ),
+            {
+                "manager_id": self.other_manager.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.property.refresh_from_db()
+
+        self.assertEqual(
+            self.property.manager_id,
+            self.manager.id,
+        )
+
     # ==========================================================
     # PROPERTY DEACTIVATION
     # ==========================================================
@@ -384,4 +598,28 @@ class PropertyAPITests(APITestCase):
             Property.objects.filter(
                 id=self.property.id,
             ).exists()
+        )
+
+    def test_admin_can_deactivate_any_property(self):
+        self.client.force_authenticate(
+            user=self.admin,
+        )
+
+        response = self.client.post(
+            self.property_deactivate_url(
+                self.other_property.id,
+            ),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.other_property.refresh_from_db()
+
+        self.assertEqual(
+            self.other_property.status,
+            PropertyStatus.INACTIVE,
         )
