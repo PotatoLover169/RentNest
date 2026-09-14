@@ -4,10 +4,10 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 
 from rest_framework import generics, permissions, serializers, status
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.accounts.models import User, UserRole
+from apps.accounts.permissions import IsAdminOrPropertyManager
 from apps.properties.models import PropertyStatus
 from apps.tenancies.models import Tenancy
 
@@ -25,9 +25,26 @@ from .serializers import PaymentSerializer
 class PaymentListCreateView(generics.ListCreateAPIView):
     """
     List and create rental payments.
+
+    Authorization:
+    - ADMIN can view all payments and create payments.
+    - PROPERTY_MANAGER can view and create payments for
+      tenancies under their managed properties.
+    - TENANT can view only their own payments.
+    - TENANT cannot create payments.
     """
 
     serializer_class = PaymentSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [
+                IsAdminOrPropertyManager(),
+            ]
+
+        return [
+            permissions.IsAuthenticated(),
+        ]
 
     def get_queryset(self):
         user = self.request.user
@@ -40,14 +57,23 @@ class PaymentListCreateView(generics.ListCreateAPIView):
             "tenancy__unit__property__manager",
         )
 
-        if user.is_staff:
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 tenancy__unit__property__manager=user,
             )
 
+        # ------------------------------------------------------
+        # TENANT
+        # ------------------------------------------------------
         if user.role == UserRole.TENANT:
             return queryset.filter(
                 tenant=user,
@@ -58,19 +84,20 @@ class PaymentListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         user = self.request.user
 
-        if user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can create payments."
-            )
+        tenancy_id = self.request.data.get(
+            "tenancy",
+        )
 
-        tenancy_id = self.request.data.get("tenancy")
-        tenant_id = self.request.data.get("tenant")
+        tenant_id = self.request.data.get(
+            "tenant",
+        )
 
         if not tenancy_id:
             raise serializers.ValidationError(
                 {
                     "tenancy": (
-                        "Tenancy is required when creating a payment."
+                        "Tenancy is required when creating "
+                        "a payment."
                     )
                 }
             )
@@ -79,22 +106,40 @@ class PaymentListCreateView(generics.ListCreateAPIView):
             raise serializers.ValidationError(
                 {
                     "tenant": (
-                        "Tenant is required when creating a payment."
+                        "Tenant is required when creating "
+                        "a payment."
                     )
                 }
             )
 
-        tenancy = get_object_or_404(
-            Tenancy.objects.select_related(
-                "tenant",
-                "unit",
-                "unit__property",
-            ).filter(
-                unit__property__manager=user,
-                unit__property__status=PropertyStatus.ACTIVE,
-            ),
-            pk=tenancy_id,
-        )
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
+            tenancy = get_object_or_404(
+                Tenancy.objects.select_related(
+                    "tenant",
+                    "unit",
+                    "unit__property",
+                ),
+                pk=tenancy_id,
+            )
+
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
+        else:
+            tenancy = get_object_or_404(
+                Tenancy.objects.select_related(
+                    "tenant",
+                    "unit",
+                    "unit__property",
+                ).filter(
+                    unit__property__manager=user,
+                    unit__property__status=PropertyStatus.ACTIVE,
+                ),
+                pk=tenancy_id,
+            )
 
         tenant = get_object_or_404(
             User.objects.filter(
@@ -119,6 +164,7 @@ class PaymentListCreateView(generics.ListCreateAPIView):
                 tenant=tenant,
                 **serializer.validated_data,
             )
+
         except ValidationError as exc:
             raise serializers.ValidationError(
                 {
@@ -137,9 +183,29 @@ class PaymentListCreateView(generics.ListCreateAPIView):
 class PaymentDetailView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a payment.
+
+    Authorization:
+    - ADMIN can retrieve/update any payment.
+    - PROPERTY_MANAGER can retrieve/update payments for
+      their managed properties.
+    - TENANT can retrieve only their own payments.
+    - TENANT cannot update payments.
     """
 
     serializer_class = PaymentSerializer
+
+    def get_permissions(self):
+        if self.request.method in (
+            "PUT",
+            "PATCH",
+        ):
+            return [
+                IsAdminOrPropertyManager(),
+            ]
+
+        return [
+            permissions.IsAuthenticated(),
+        ]
 
     def get_queryset(self):
         user = self.request.user
@@ -152,14 +218,23 @@ class PaymentDetailView(generics.RetrieveUpdateAPIView):
             "tenancy__unit__property__manager",
         )
 
-        if user.is_staff:
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
+        if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 tenancy__unit__property__manager=user,
             )
 
+        # ------------------------------------------------------
+        # TENANT
+        # ------------------------------------------------------
         if user.role == UserRole.TENANT:
             return queryset.filter(
                 tenant=user,
@@ -168,11 +243,6 @@ class PaymentDetailView(generics.RetrieveUpdateAPIView):
         return queryset.none()
 
     def update(self, request, *args, **kwargs):
-        if request.user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can update payments."
-            )
-
         protected_fields = {
             "status",
             "tenant",
@@ -195,7 +265,11 @@ class PaymentDetailView(generics.RetrieveUpdateAPIView):
                 }
             )
 
-        return super().update(request, *args, **kwargs)
+        return super().update(
+            request,
+            *args,
+            **kwargs,
+        )
 
 
 # ============================================================
@@ -204,20 +278,34 @@ class PaymentDetailView(generics.RetrieveUpdateAPIView):
 
 
 class PaymentMarkPaidView(generics.GenericAPIView):
+    """
+    Mark a payment as PAID.
+
+    ADMIN and PROPERTY_MANAGER only.
+    """
 
     permission_classes = [
-        permissions.IsAuthenticated,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
-        return Payment.objects.select_related(
+        user = self.request.user
+
+        queryset = Payment.objects.select_related(
+            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
-        ).filter(
-            tenancy__unit__property__manager=self.request.user,
+            "tenancy__unit__property__manager",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            tenancy__unit__property__manager=user,
         )
 
     def get_object(self):
@@ -227,24 +315,28 @@ class PaymentMarkPaidView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        if request.user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can update payment status."
-            )
-
         payment = self.get_object()
 
-        payment_date = request.data.get("payment_date")
-        reference_number = request.data.get("reference_number")
+        payment_date = request.data.get(
+            "payment_date",
+        )
+
+        reference_number = request.data.get(
+            "reference_number",
+        )
 
         if payment_date:
             try:
-                payment_date = date.fromisoformat(payment_date)
+                payment_date = date.fromisoformat(
+                    payment_date,
+                )
+
             except ValueError:
                 raise serializers.ValidationError(
                     {
                         "payment_date": (
-                            "Payment date must use YYYY-MM-DD format."
+                            "Payment date must use "
+                            "YYYY-MM-DD format."
                         )
                     }
                 )
@@ -255,6 +347,7 @@ class PaymentMarkPaidView(generics.GenericAPIView):
                 payment_date=payment_date,
                 reference_number=reference_number,
             )
+
         except ValidationError as exc:
             raise serializers.ValidationError(
                 {
@@ -274,20 +367,34 @@ class PaymentMarkPaidView(generics.GenericAPIView):
 
 
 class PaymentMarkFailedView(generics.GenericAPIView):
+    """
+    Mark a payment as FAILED.
+
+    ADMIN and PROPERTY_MANAGER only.
+    """
 
     permission_classes = [
-        permissions.IsAuthenticated,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
-        return Payment.objects.select_related(
+        user = self.request.user
+
+        queryset = Payment.objects.select_related(
+            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
-        ).filter(
-            tenancy__unit__property__manager=self.request.user,
+            "tenancy__unit__property__manager",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            tenancy__unit__property__manager=user,
         )
 
     def get_object(self):
@@ -297,11 +404,6 @@ class PaymentMarkFailedView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        if request.user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can update payment status."
-            )
-
         payment = self.get_object()
 
         try:
@@ -309,6 +411,7 @@ class PaymentMarkFailedView(generics.GenericAPIView):
                 payment_instance=payment,
                 notes=request.data.get("notes"),
             )
+
         except ValidationError as exc:
             raise serializers.ValidationError(
                 {
@@ -328,20 +431,34 @@ class PaymentMarkFailedView(generics.GenericAPIView):
 
 
 class PaymentRefundView(generics.GenericAPIView):
+    """
+    Refund a payment.
+
+    ADMIN and PROPERTY_MANAGER only.
+    """
 
     permission_classes = [
-        permissions.IsAuthenticated,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
-        return Payment.objects.select_related(
+        user = self.request.user
+
+        queryset = Payment.objects.select_related(
+            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
-        ).filter(
-            tenancy__unit__property__manager=self.request.user,
+            "tenancy__unit__property__manager",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            tenancy__unit__property__manager=user,
         )
 
     def get_object(self):
@@ -351,11 +468,6 @@ class PaymentRefundView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        if request.user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can update payment status."
-            )
-
         payment = self.get_object()
 
         try:
@@ -363,6 +475,7 @@ class PaymentRefundView(generics.GenericAPIView):
                 payment_instance=payment,
                 notes=request.data.get("notes"),
             )
+
         except ValidationError as exc:
             raise serializers.ValidationError(
                 {
@@ -382,20 +495,34 @@ class PaymentRefundView(generics.GenericAPIView):
 
 
 class PaymentCancelView(generics.GenericAPIView):
+    """
+    Cancel a payment.
+
+    ADMIN and PROPERTY_MANAGER only.
+    """
 
     permission_classes = [
-        permissions.IsAuthenticated,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = PaymentSerializer
 
     def get_queryset(self):
-        return Payment.objects.select_related(
+        user = self.request.user
+
+        queryset = Payment.objects.select_related(
+            "tenant",
             "tenancy",
             "tenancy__unit",
             "tenancy__unit__property",
-        ).filter(
-            tenancy__unit__property__manager=self.request.user,
+            "tenancy__unit__property__manager",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            tenancy__unit__property__manager=user,
         )
 
     def get_object(self):
@@ -405,11 +532,6 @@ class PaymentCancelView(generics.GenericAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        if request.user.role != UserRole.PROPERTY_MANAGER:
-            raise PermissionDenied(
-                "Only property managers can update payment status."
-            )
-
         payment = self.get_object()
 
         try:
@@ -417,6 +539,7 @@ class PaymentCancelView(generics.GenericAPIView):
                 payment_instance=payment,
                 notes=request.data.get("notes"),
             )
+
         except ValidationError as exc:
             raise serializers.ValidationError(
                 {
