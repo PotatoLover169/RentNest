@@ -47,9 +47,7 @@ class MaintenanceService:
             Unit.objects
             .select_for_update()
             .select_related("property")
-            .get(
-                pk=unit.pk,
-            )
+            .get(pk=unit.pk)
         )
 
         has_active_tenancy = tenant.tenancies.filter(
@@ -86,6 +84,14 @@ class MaintenanceService:
     ):
         """
         Move a PENDING request to IN_PROGRESS.
+
+        Rules:
+        - ADMIN can start any maintenance request.
+        - PROPERTY_MANAGER can start requests for their
+          managed properties.
+        - TENANTS cannot start requests.
+        - ADMIN is not assigned to assigned_to because that
+          field represents the responsible property manager.
         """
 
         maintenance_request = (
@@ -94,13 +100,12 @@ class MaintenanceService:
             .select_related(
                 "property",
                 "unit",
+                "property__manager",
             )
-            .get(
-                pk=request_instance.pk,
-            )
+            .get(pk=request_instance.pk)
         )
 
-        MaintenanceService._ensure_manager_owns_request(
+        MaintenanceService._ensure_manager_can_manage_request(
             maintenance_request=maintenance_request,
             manager=manager,
         )
@@ -117,7 +122,12 @@ class MaintenanceService:
             MaintenanceStatus.IN_PROGRESS
         )
 
-        maintenance_request.assigned_to = manager
+        if manager.role == UserRole.PROPERTY_MANAGER:
+            maintenance_request.assigned_to = manager
+        else:
+            maintenance_request.assigned_to = (
+                maintenance_request.property.manager
+            )
 
         maintenance_request.save(
             update_fields=[
@@ -144,7 +154,12 @@ class MaintenanceService:
         """
         Move an IN_PROGRESS request to COMPLETED.
 
-        Optionally records the actual maintenance cost.
+        Rules:
+        - ADMIN can complete any maintenance request.
+        - PROPERTY_MANAGER can complete requests for their
+          managed properties.
+        - TENANTS cannot complete requests.
+        - Actual cost cannot be negative.
         """
 
         maintenance_request = (
@@ -154,12 +169,10 @@ class MaintenanceService:
                 "property",
                 "unit",
             )
-            .get(
-                pk=request_instance.pk,
-            )
+            .get(pk=request_instance.pk)
         )
 
-        MaintenanceService._ensure_manager_owns_request(
+        MaintenanceService._ensure_manager_can_manage_request(
             maintenance_request=maintenance_request,
             manager=manager,
         )
@@ -226,9 +239,7 @@ class MaintenanceService:
         maintenance_request = (
             MaintenanceRequest.objects
             .select_for_update()
-            .get(
-                pk=request_instance.pk,
-            )
+            .get(pk=request_instance.pk)
         )
 
         if maintenance_request.tenant_id != tenant.id:
@@ -263,20 +274,33 @@ class MaintenanceService:
     # ============================================================
 
     @staticmethod
-    def _ensure_manager_owns_request(
+    def _ensure_manager_can_manage_request(
         *,
         maintenance_request,
         manager,
     ):
         """
-        Ensure that the property manager owns the property
-        associated with the maintenance request.
+        Ensure the user is authorized to manage a maintenance
+        request.
+
+        ADMIN:
+            Can manage requests across the system.
+
+        PROPERTY_MANAGER:
+            Can manage requests belonging to properties they
+            manage.
+
+        TENANT:
+            Cannot manage maintenance workflow.
         """
+
+        if manager.role == UserRole.ADMIN:
+            return
 
         if manager.role != UserRole.PROPERTY_MANAGER:
             raise ValidationError(
-                "Only property managers can manage "
-                "maintenance requests."
+                "Only administrators and property managers "
+                "can manage maintenance requests."
             )
 
         if (

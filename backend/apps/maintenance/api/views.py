@@ -1,19 +1,17 @@
+from decimal import Decimal, InvalidOperation
+
 from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 
-from rest_framework import (
-    generics,
-    permissions,
-    serializers,
-    status,
-)
+from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
-from apps.maintenance.models import MaintenanceRequest
-from apps.maintenance.services import MaintenanceService
-from apps.properties.permissions import IsPropertyManager
+
+from ..models import MaintenanceRequest
+from ..permissions import IsAdminOrPropertyManager, IsTenant
+from ..services import MaintenanceService
 
 from .serializers import MaintenanceRequestSerializer
 
@@ -29,17 +27,24 @@ class MaintenanceListCreateView(
     """
     List and create maintenance requests.
 
-    Tenants can create requests for units where they
-    have an active tenancy.
+    ADMIN:
+        Can view all maintenance requests.
 
-    Property managers can view requests for properties
-    they manage.
+    PROPERTY_MANAGER:
+        Can view requests for properties they manage.
+
+    TENANT:
+        Can view their own requests and create requests for
+        units where they have an active tenancy.
     """
 
     serializer_class = MaintenanceRequestSerializer
-    permission_classes = [
-        permissions.IsAuthenticated,
-    ]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsTenant()]
+
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
@@ -52,7 +57,7 @@ class MaintenanceListCreateView(
             "assigned_to",
         )
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return queryset
 
         if user.role == UserRole.PROPERTY_MANAGER:
@@ -70,16 +75,6 @@ class MaintenanceListCreateView(
     def perform_create(self, serializer):
         user = self.request.user
 
-        if user.role != UserRole.TENANT:
-            raise serializers.ValidationError(
-                {
-                    "detail": (
-                        "Only tenants can submit "
-                        "maintenance requests."
-                    )
-                }
-            )
-
         unit = serializer.validated_data.get(
             "unit"
         )
@@ -95,18 +90,20 @@ class MaintenanceListCreateView(
             )
 
         try:
-            MaintenanceService.create_request(
-                tenant=user,
-                unit=unit,
-                title=serializer.validated_data[
-                    "title"
-                ],
-                description=serializer.validated_data[
-                    "description"
-                ],
-                priority=serializer.validated_data.get(
-                    "priority"
-                ),
+            serializer.instance = (
+                MaintenanceService.create_request(
+                    tenant=user,
+                    unit=unit,
+                    title=serializer.validated_data[
+                        "title"
+                    ],
+                    description=serializer.validated_data[
+                        "description"
+                    ],
+                    priority=serializer.validated_data.get(
+                        "priority"
+                    ),
+                )
             )
 
         except ValidationError as exc:
@@ -128,14 +125,30 @@ class MaintenanceDetailView(
     """
     Retrieve or update a maintenance request.
 
-    Workflow-related fields cannot be changed through
-    normal PATCH or PUT requests.
+    ADMIN:
+        Can retrieve and update any request.
+
+    PROPERTY_MANAGER:
+        Can retrieve and update requests belonging to
+        properties they manage.
+
+    TENANT:
+        Can retrieve their own requests but cannot update them.
+
+    Workflow-related fields cannot be changed through normal
+    PATCH or PUT requests.
     """
 
     serializer_class = MaintenanceRequestSerializer
-    permission_classes = [
-        permissions.IsAuthenticated,
-    ]
+
+    def get_permissions(self):
+        if self.request.method in {
+            "PUT",
+            "PATCH",
+        }:
+            return [IsAdminOrPropertyManager()]
+
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self) -> QuerySet:
         user = self.request.user
@@ -148,7 +161,7 @@ class MaintenanceDetailView(
             "assigned_to",
         )
 
-        if user.is_staff:
+        if user.role == UserRole.ADMIN:
             return queryset
 
         if user.role == UserRole.PROPERTY_MANAGER:
@@ -164,18 +177,6 @@ class MaintenanceDetailView(
         return queryset.none()
 
     def perform_update(self, serializer):
-        if self.request.user.role != (
-            UserRole.PROPERTY_MANAGER
-        ):
-            raise serializers.ValidationError(
-                {
-                    "detail": (
-                        "Only property managers can "
-                        "update maintenance requests."
-                    )
-                }
-            )
-
         forbidden_fields = {
             "status",
             "assigned_to",
@@ -213,19 +214,38 @@ class MaintenanceStartView(
     """
     Start work on a PENDING maintenance request.
 
-    Only the property manager who manages the property
-    can start the request.
+    ADMIN:
+        Can start any maintenance request.
+
+    PROPERTY_MANAGER:
+        Can start requests belonging to properties they manage.
+
+    TENANT:
+        Cannot start maintenance requests.
     """
 
     permission_classes = [
-        IsPropertyManager,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = MaintenanceRequestSerializer
 
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
-            property__manager=self.request.user,
+        user = self.request.user
+
+        queryset = MaintenanceRequest.objects.select_related(
+            "tenant",
+            "property",
+            "property__manager",
+            "unit",
+            "assigned_to",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            property__manager=user,
         )
 
     def get_object(self):
@@ -234,7 +254,12 @@ class MaintenanceStartView(
             pk=self.kwargs["pk"],
         )
 
-    def post(self, request, *args, **kwargs):
+    def post(
+        self,
+        request,
+        *args,
+        **kwargs
+    ):
         maintenance_request = self.get_object()
 
         try:
@@ -271,19 +296,38 @@ class MaintenanceCompleteView(
     """
     Complete an IN_PROGRESS maintenance request.
 
-    Only the property manager who manages the property
-    can complete the request.
+    ADMIN:
+        Can complete any maintenance request.
+
+    PROPERTY_MANAGER:
+        Can complete requests belonging to properties they manage.
+
+    TENANT:
+        Cannot complete maintenance requests.
     """
 
     permission_classes = [
-        IsPropertyManager,
+        IsAdminOrPropertyManager,
     ]
 
     serializer_class = MaintenanceRequestSerializer
 
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
-            property__manager=self.request.user,
+        user = self.request.user
+
+        queryset = MaintenanceRequest.objects.select_related(
+            "tenant",
+            "property",
+            "property__manager",
+            "unit",
+            "assigned_to",
+        )
+
+        if user.role == UserRole.ADMIN:
+            return queryset
+
+        return queryset.filter(
+            property__manager=user,
         )
 
     def get_object(self):
@@ -292,7 +336,12 @@ class MaintenanceCompleteView(
             pk=self.kwargs["pk"],
         )
 
-    def post(self, request, *args, **kwargs):
+    def post(
+        self,
+        request,
+        *args,
+        **kwargs
+    ):
         maintenance_request = self.get_object()
 
         actual_cost = request.data.get(
@@ -302,10 +351,12 @@ class MaintenanceCompleteView(
 
         if actual_cost is not None:
             try:
-                actual_cost = float(
-                    actual_cost
+                actual_cost = Decimal(
+                    str(actual_cost)
                 )
+
             except (
+                InvalidOperation,
                 TypeError,
                 ValueError,
             ):
@@ -357,7 +408,7 @@ class MaintenanceCancelView(
     """
 
     permission_classes = [
-        permissions.IsAuthenticated,
+        IsTenant,
     ]
 
     serializer_class = MaintenanceRequestSerializer
@@ -373,7 +424,12 @@ class MaintenanceCancelView(
             pk=self.kwargs["pk"],
         )
 
-    def post(self, request, *args, **kwargs):
+    def post(
+        self,
+        request,
+        *args,
+        **kwargs
+    ):
         maintenance_request = self.get_object()
 
         try:

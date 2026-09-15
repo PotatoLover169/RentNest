@@ -1,17 +1,13 @@
-from django.contrib.auth import get_user_model
 from django.db import transaction
 
-
-User = get_user_model()
+from .models import User
 
 
 class AccountService:
-    """
-    Business logic for RentNest user accounts.
 
-    API views should not directly handle account creation
-    or other account-related business operations.
-    """
+    # ============================================================
+    # REGISTER USER
+    # ============================================================
 
     @staticmethod
     @transaction.atomic
@@ -19,24 +15,24 @@ class AccountService:
         *,
         email,
         password,
-        first_name,
-        last_name,
+        first_name="",
+        last_name="",
     ):
         """
-        Register a new RentNest user.
+        Register a new user.
 
-        Public registration always creates a TENANT account.
-        Administrative roles must never be assigned through
-        the public registration endpoint.
+        Public registration is intended for TENANT accounts.
+        Administrative and property manager accounts are created
+        through protected administrative workflows.
         """
 
         email = email.strip().lower()
+        first_name = first_name.strip()
+        last_name = last_name.strip()
 
-        user = User.objects.create_user(
+        return User.objects.create_user(
             email=email,
             password=password,
-            first_name=first_name.strip(),
-            last_name=last_name.strip(),
+            first_name=first_name,
+            last_name=last_name,
         )
-
-        return user

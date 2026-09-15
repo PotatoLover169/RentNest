@@ -206,7 +206,7 @@ class MaintenanceAPITests(TestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_403_FORBIDDEN,
         )
 
     def test_tenant_without_active_tenancy_cannot_create_request(
