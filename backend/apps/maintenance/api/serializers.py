@@ -13,6 +13,11 @@ class MaintenanceRequestSerializer(
     Tenant, property, status, assigned manager and
     workflow timestamps are controlled by the
     service/API workflow.
+
+    The unit may be selected when creating a request,
+    but cannot be changed after the request has been
+    created. This preserves the relationship between
+    the maintenance request's property and unit.
     """
 
     tenant = serializers.PrimaryKeyRelatedField(
@@ -61,6 +66,29 @@ class MaintenanceRequestSerializer(
             "created_at",
             "updated_at",
         ]
+
+    def validate(self, attrs):
+        """
+        Prevent changing the unit after creation.
+
+        The unit determines the property associated with
+        the maintenance request. Allowing the unit to change
+        independently could create an inconsistent
+        property/unit relationship.
+        """
+
+        if self.instance is not None:
+            if "unit" in attrs:
+                raise serializers.ValidationError(
+                    {
+                        "unit": (
+                            "The unit cannot be changed after "
+                            "a maintenance request has been created."
+                        )
+                    }
+                )
+
+        return attrs
 
     def validate_title(self, value):
         value = value.strip()

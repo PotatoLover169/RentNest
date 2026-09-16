@@ -67,6 +67,15 @@ class MaintenanceAPITests(TestCase):
             monthly_rent=Decimal("15000.00"),
         )
 
+        cls.second_unit = Unit.objects.create(
+            property=cls.property,
+            unit_number="102",
+            unit_type=UnitType.ONE_BEDROOM,
+            bedrooms=1,
+            bathrooms=Decimal("1.0"),
+            monthly_rent=Decimal("15000.00"),
+        )
+
     def setUp(self):
         self.client = APIClient()
 
@@ -296,7 +305,7 @@ class MaintenanceAPITests(TestCase):
             response.data["results"][0]["id"],
             request.id,
         )
-    
+
     # ==========================================================
     # START
     # ==========================================================
@@ -407,6 +416,43 @@ class MaintenanceAPITests(TestCase):
         self.assertEqual(
             request.status,
             MaintenanceStatus.CANCELLED,
+        )
+
+    # ==========================================================
+    # UPDATE INTEGRITY
+    # ==========================================================
+
+    def test_unit_cannot_be_changed_after_request_creation(self):
+        request = self.create_request()
+
+        self.client.force_authenticate(
+            user=self.manager,
+        )
+
+        response = self.client.patch(
+            self.detail_url(request.id),
+            {
+                "unit": self.second_unit.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+            response.data,
+        )
+
+        request.refresh_from_db()
+
+        self.assertEqual(
+            request.unit_id,
+            self.unit.id,
+        )
+
+        self.assertEqual(
+            request.property_id,
+            self.property.id,
         )
 
     # ==========================================================
