@@ -22,6 +22,23 @@ load_dotenv(BASE_DIR / ".env")
 
 
 # ============================================================
+# ENVIRONMENT HELPERS
+# ============================================================
+
+def get_env_list(name, default=""):
+    """
+    Read a comma-separated environment variable into a list.
+    Empty values are ignored.
+    """
+
+    return [
+        value.strip()
+        for value in os.getenv(name, default).split(",")
+        if value.strip()
+    ]
+
+
+# ============================================================
 # SECURITY
 # ============================================================
 
@@ -33,16 +50,18 @@ if not SECRET_KEY:
         "Please add it to your backend/.env file."
     )
 
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+DEBUG = (
+    os.getenv(
+        "DJANGO_DEBUG",
+        "False",
+    ).strip().lower()
+    == "true"
+)
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv(
-        "DJANGO_ALLOWED_HOSTS",
-        "localhost,127.0.0.1",
-    ).split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = get_env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1",
+)
 
 
 # ============================================================
@@ -134,11 +153,26 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME", "rentnest"),
-        "USER": os.getenv("DB_USER", "root"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "3306"),
+        "NAME": os.getenv(
+            "DB_NAME",
+            "rentnest",
+        ),
+        "USER": os.getenv(
+            "DB_USER",
+            "root",
+        ),
+        "PASSWORD": os.getenv(
+            "DB_PASSWORD",
+            "",
+        ),
+        "HOST": os.getenv(
+            "DB_HOST",
+            "127.0.0.1",
+        ),
+        "PORT": os.getenv(
+            "DB_PORT",
+            "3306",
+        ),
         "OPTIONS": {
             "charset": "utf8mb4",
         },
@@ -245,7 +279,6 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ),
-    # Pagination
     "DEFAULT_PAGINATION_CLASS": (
         "rest_framework.pagination.PageNumberPagination"
     ),
@@ -258,15 +291,21 @@ REST_FRAMEWORK = {
 # ============================================================
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=15
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=7
+    ),
 
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 
     "UPDATE_LAST_LOGIN": True,
 
-    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_HEADER_TYPES": (
+        "Bearer",
+    ),
 }
 
 
@@ -274,28 +313,20 @@ SIMPLE_JWT = {
 # CORS
 # ============================================================
 
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173",
-    ).split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = get_env_list(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173",
+)
 
 
 # ============================================================
 # CSRF TRUSTED ORIGINS
 # ============================================================
 
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CSRF_TRUSTED_ORIGINS",
-        "http://localhost:5173",
-    ).split(",")
-    if origin.strip()
-]
+CSRF_TRUSTED_ORIGINS = get_env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:5173",
+)
 
 
 # ============================================================
@@ -304,18 +335,27 @@ CSRF_TRUSTED_ORIGINS = [
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
-SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_REFERRER_POLICY = (
+    "strict-origin-when-cross-origin"
+)
 
 X_FRAME_OPTIONS = "DENY"
 
 
 # ============================================================
+# PROXY / HTTPS CONFIGURATION
+# ============================================================
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = (
+        "HTTP_X_FORWARDED_PROTO",
+        "https",
+    )
+
+
+# ============================================================
 # PRODUCTION SECURITY
 # ============================================================
-#
-# These are enabled only when DEBUG=False.
-# This prevents local HTTP development from being broken.
-#
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
@@ -335,4 +375,7 @@ if not DEBUG:
 # EMAIL
 # ============================================================
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
