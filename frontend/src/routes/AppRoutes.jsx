@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import DashboardLayout from "../layouts/DashboardLayout";
 import Dashboard from "../pages/dashboard/Dashboard";
+import Login from "../pages/auth/Login";
+import Register from "../pages/auth/Register";
 import ProtectedRoute from "./ProtectedRoute";
 
 function AppRoutes() {
@@ -16,16 +18,8 @@ function AppRoutes() {
         </Route>
       </Route>
 
-      <Route
-        path="/login"
-        element={
-          <div className="flex min-h-screen items-center justify-center bg-slate-50">
-            <p className="text-slate-600">
-              Login page coming next.
-            </p>
-          </div>
-        }
-      />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       <Route
         path="*"
