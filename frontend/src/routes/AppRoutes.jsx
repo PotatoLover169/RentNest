@@ -4,6 +4,7 @@ import DashboardLayout from "../layouts/DashboardLayout";
 import Dashboard from "../pages/dashboard/Dashboard";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
+import Properties from "../pages/properties/Properties";
 import ProtectedRoute from "./ProtectedRoute";
 
 function AppRoutes() {
@@ -15,11 +16,23 @@ function AppRoutes() {
             path="/dashboard"
             element={<Dashboard />}
           />
+
+          <Route
+            path="/properties"
+            element={<Properties />}
+          />
         </Route>
       </Route>
 
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route
+        path="/login"
+        element={<Login />}
+      />
+
+      <Route
+        path="/register"
+        element={<Register />}
+      />
 
       <Route
         path="*"
