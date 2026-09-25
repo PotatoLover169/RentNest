@@ -9,6 +9,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
 import Tenancies from "../pages/tenancies/Tenancies";
 import Payments from "../pages/payments/Payments";
+import Maintenance from "../pages/maintenance/Maintenance";
 
 function AppRoutes() {
   return (
@@ -38,6 +39,11 @@ function AppRoutes() {
           <Route
             path="/payments"
             element={<Payments />}
+          />
+
+          <Route
+            path="/maintenance"
+            element={<Maintenance />}
           />
         </Route>
       </Route>
