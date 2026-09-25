@@ -7,6 +7,7 @@ import Register from "../pages/auth/Register";
 import Properties from "../pages/properties/Properties";
 import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
+import Tenancies from "../pages/tenancies/Tenancies";
 
 function AppRoutes() {
   return (
@@ -26,6 +27,11 @@ function AppRoutes() {
           <Route
             path="/units"
             element={<Units />}
+          />
+
+          <Route
+            path="/tenancies"
+            element={<Tenancies />}
           />
         </Route>
       </Route>
