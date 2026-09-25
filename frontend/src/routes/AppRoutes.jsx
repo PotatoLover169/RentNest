@@ -6,6 +6,7 @@ import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import Properties from "../pages/properties/Properties";
 import ProtectedRoute from "./ProtectedRoute";
+import Units from "../pages/units/Units";
 
 function AppRoutes() {
   return (
@@ -20,6 +21,11 @@ function AppRoutes() {
           <Route
             path="/properties"
             element={<Properties />}
+          />
+
+          <Route
+            path="/units"
+            element={<Units />}
           />
         </Route>
       </Route>
