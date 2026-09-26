@@ -10,6 +10,7 @@ import Units from "../pages/units/Units";
 import Tenancies from "../pages/tenancies/Tenancies";
 import Payments from "../pages/payments/Payments";
 import Maintenance from "../pages/maintenance/Maintenance";
+import Notifications from "../pages/notifications/Notifications";
 
 function AppRoutes() {
   return (
@@ -44,6 +45,11 @@ function AppRoutes() {
           <Route
             path="/maintenance"
             element={<Maintenance />}
+          />
+
+          <Route
+            path="/notifications"
+            element={<Notifications />}
           />
         </Route>
       </Route>
