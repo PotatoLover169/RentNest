@@ -1,0 +1,196 @@
+warning: in the working copy of 'frontend/src/api/maintenance.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/api/notifications.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/api/payments.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/api/properties.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/api/tenancies.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/api/units.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/context/AuthContext.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/layouts/DashboardLayout.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/pages/auth/Login.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/pages/dashboard/Dashboard.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/routes/ProtectedRoute.jsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/frontend/src/api/maintenance.js b/frontend/src/api/maintenance.js[m
+[1mindex c9138bf..2976e0b 100644[m
+[1m--- a/frontend/src/api/maintenance.js[m
+[1m+++ b/frontend/src/api/maintenance.js[m
+[36m@@ -2,6 +2,40 @@[m [mimport apiClient from "./client";[m
+ [m
+ export async function getMaintenanceRequests() {[m
+   const response = await apiClient.get("/maintenance/");[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function getMaintenanceRequest(id) {[m
+[32m+[m[32m  const response = await apiClient.get(`/maintenance/${id}/`);[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function createMaintenanceRequest(data) {[m
+[32m+[m[32m  const response = await apiClient.post("/maintenance/", data);[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function updateMaintenanceRequest(id, data) {[m
+[32m+[m[32m  const response = await apiClient.patch(`/maintenance/${id}/`, data);[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function startMaintenanceRequest(id) {[m
+[32m+[m[32m  const response = await apiClient.post(`/maintenance/${id}/start/`);[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function completeMaintenanceRequest(id, data) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/maintenance/${id}/complete/`,[m
+[32m+[m[32m    data,[m
+[32m+[m[32m  );[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+ [m
+[32m+[m[32mexport async function cancelMaintenanceRequest(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/maintenance/${id}/cancel/`,[m
+[32m+[m[32m  );[m
+   return response.data;[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/frontend/src/api/notifications.js b/frontend/src/api/notifications.js[m
+[1mindex 9dc1070..9312997 100644[m
+[1m--- a/frontend/src/api/notifications.js[m
+[1m+++ b/frontend/src/api/notifications.js[m
+[36m@@ -1,7 +1,49 @@[m
+ import apiClient from "./client";[m
+ [m
+ export async function getNotifications() {[m
+[31m-  const response = await apiClient.get("/notifications/");[m
+[32m+[m[32m  const response = await apiClient.get([m
+[32m+[m[32m    "/notifications/",[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function getNotification(id) {[m
+[32m+[m[32m  const response = await apiClient.get([m
+[32m+[m[32m    `/notifications/${id}/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function markNotificationRead(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/notifications/${id}/mark-read/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function markNotificationUnread(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/notifications/${id}/mark-unread/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function markAllNotificationsRead() {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    "/notifications/mark-all-read/",[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function deleteNotification(id) {[m
+[32m+[m[32m  const response = await apiClient.delete([m
+[32m+[m[32m    `/notifications/${id}/delete/`,[m
+[32m+[m[32m  );[m
+ [m
+   return response.data;[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/frontend/src/api/payments.js b/frontend/src/api/payments.js[m
+[1mindex 2b7db27..bf1f9da 100644[m
+[1m--- a/frontend/src/api/payments.js[m
+[1m+++ b/frontend/src/api/payments.js[m
+[36m@@ -1,7 +1,67 @@[m
+ import apiClient from "./client";[m
+ [m
+ export async function getPayments() {[m
+[31m-  const response = await apiClient.get("/payments/");[m
+[32m+[m[32m  const response = await apiClient.get([m
+[32m+[m[32m    "/payments/",[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function getPayment(id) {[m
+[32m+[m[32m  const response = await apiClient.get([m
+[32m+[m[32m    `/payments/${id}/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function createPayment(data) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    "/payments/",[m
+[32m+[m[32m    data,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function updatePayment(id, data) {[m
+[32m+[m[32m  const response = await apiClient.patch([m
+[32m+[m[32m    `/payments/${id}/`,[m
+[32m+[m[32m    data,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function markPaymentPaid(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/payments/${id}/mark-paid/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function markPaymentFailed(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/payments/${id}/mark-failed/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function refundPayment(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/payments/${id}/refund/`,[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return response.data;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function cancelPayment(id) {[m
+[32m+[m[32m  const response = await apiClient.post([m
+[32m+[m[32m    `/payments/${id}/cancel/`,[m
+[32m+[m[32m  );[m
+ [m
+   return response.data;[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/frontend/src/api/properties.js b/frontend/src/api/properties.js[m
+[1mindex 308264a..3d5b55c 100644[m
+[1m--- a/frontend/src/api/properties.js[m
+[1m+++ b/frontend/src/api/properties.js[m
+[36m@@ -3,5 +3,37 @@[m [mimport apiClient from "./client";[m
+ export async function getProperties() {[m
+   const response = await apiClient.get("/properties/");[m
+ [m
+[32m+[m[32m  return r

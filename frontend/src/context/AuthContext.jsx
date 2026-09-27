@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
 } from "react";
@@ -12,7 +10,7 @@ import {
   logoutUser,
 } from "../api/auth";
 
-const AuthContext = createContext(null);
+import { AuthContext } from "./authContextDefinition";
 
 const ACCESS_TOKEN_KEY = "rentnest_access_token";
 const REFRESH_TOKEN_KEY = "rentnest_refresh_token";
@@ -29,27 +27,45 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const loadCurrentUser = useCallback(async () => {
-    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-
-    if (!accessToken) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    } catch {
-      clearAuthentication();
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clearAuthentication]);
-
   useEffect(() => {
-    loadCurrentUser();
-  }, [loadCurrentUser]);
+    let isMounted = true;
+
+    const initializeAuthentication = async () => {
+      const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+
+      if (!accessToken) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const currentUser = await getCurrentUser();
+
+        if (isMounted) {
+          setUser(currentUser);
+        }
+      } catch {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeAuthentication();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const login = async (credentials) => {
     const data = await loginUser(credentials);
@@ -98,16 +114,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error(
-      "useAuth must be used inside an AuthProvider.",
-    );
-  }
-
-  return context;
 }
