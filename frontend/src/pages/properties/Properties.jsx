@@ -1,85 +1,147 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { getProperties } from "../../api/properties";
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+} from "../../components/ui";
+import { getPagination, getResults } from "../../utils/api";
 
 function Properties() {
+  const navigate = useNavigate();
+
   const [properties, setProperties] = useState([]);
+  const [pagination, setPagination] = useState({
+    count: 0,
+    next: null,
+    previous: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadProperties = async () => {
-      try {
-        setIsLoading(true);
-        setError("");
+  const loadProperties = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError("");
 
-        const data = await getProperties();
+      const data = await getProperties();
 
-        setProperties(data.results ?? data);
-      } catch (requestError) {
-        setError(
-          requestError?.response?.data?.message ||
-            "Unable to load properties.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadProperties();
+      setProperties(getResults(data));
+      setPagination(getPagination(data));
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message ||
+          "Unable to load properties.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Data fetching is intentionally triggered on mount.
+    // The called function manages loading/error/result state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadProperties();
+  }, [loadProperties]);
+
+  const formatAddress = (property) => {
+    const parts = [
+      property.address_line,
+      property.city,
+      property.province,
+      property.postal_code,
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(", ") : "—";
+  };
+
+  const getStatusVariant = (status) => {
+    const normalizedStatus = status?.toLowerCase();
+
+    if (
+      normalizedStatus === "active" ||
+      normalizedStatus === "available"
+    ) {
+      return "success";
+    }
+
+    if (
+      normalizedStatus === "inactive" ||
+      normalizedStatus === "deactivated"
+    ) {
+      return "danger";
+    }
+
+    return "default";
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <section>
-        <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-          Management
-        </p>
-
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-          Properties
-        </h1>
-
-        <p className="mt-2 max-w-2xl text-slate-500">
-          Manage your rental properties and view their current
-          information.
-        </p>
-      </section>
+      <PageHeader
+        eyebrow="Management"
+        title="Properties"
+        description="Manage your rental properties and view their current information."
+        action={
+          <Button onClick={() => navigate("/properties/new")}>
+            Add Property
+          </Button>
+        }
+      />
 
       {isLoading && (
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Loading properties...
-          </p>
-        </section>
+        <LoadingState message="Loading properties..." />
       )}
 
       {!isLoading && error && (
-        <section className="rounded-xl border border-red-200 bg-red-50 p-6">
-          <h2 className="text-lg font-semibold text-red-900">
-            Unable to load properties
-          </h2>
-
-          <p className="mt-2 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
+        <ErrorState
+          title="Unable to load properties"
+          message={error}
+          action={
+            <Button
+              variant="secondary"
+              onClick={loadProperties}
+            >
+              Try Again
+            </Button>
+          }
+        />
       )}
 
       {!isLoading && !error && properties.length === 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-950">
-            No properties yet
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">
-            Properties assigned to your account will appear here.
-          </p>
-        </section>
+        <EmptyState
+          title="No properties yet"
+          description="Create your first rental property to start managing your portfolio."
+          action={
+            <Button onClick={() => navigate("/properties/new")}>
+              Add Property
+            </Button>
+          }
+        />
       )}
 
       {!isLoading && !error && properties.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div>
+              <h2 className="font-semibold text-slate-950">
+                Property List
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {pagination.count}{" "}
+                {pagination.count === 1
+                  ? "property"
+                  : "properties"}
+              </p>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
@@ -94,6 +156,10 @@ function Properties() {
 
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Status
+                  </th>
+
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -111,20 +177,46 @@ function Properties() {
                     </td>
 
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {property.address || "—"}
+                      {formatAddress(property)}
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      <span
+                        className={[
+                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                          getStatusVariant(property.status) ===
+                            "success"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : getStatusVariant(
+                                  property.status,
+                                ) === "danger"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-slate-100 text-slate-700",
+                        ].join(" ")}
+                      >
                         {property.status || "Active"}
                       </span>
+                    </td>
+
+                    <td className="px-6 py-4 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/properties/${property.id}`,
+                          )
+                        }
+                      >
+                        View
+                      </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
       )}
     </div>
   );
