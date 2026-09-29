@@ -5,6 +5,7 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import Properties from "../pages/properties/Properties";
+import PropertyForm from "../pages/properties/PropertyForm";
 import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
 import Tenancies from "../pages/tenancies/Tenancies";
@@ -25,6 +26,16 @@ function AppRoutes() {
           <Route
             path="/properties"
             element={<Properties />}
+          />
+
+          <Route
+            path="/properties/new"
+            element={<PropertyForm />}
+          />
+
+          <Route
+            path="/properties/:id/edit"
+            element={<PropertyForm />}
           />
 
           <Route
@@ -66,7 +77,12 @@ function AppRoutes() {
 
       <Route
         path="*"
-        element={<Navigate to="/dashboard" replace />}
+        element={
+          <Navigate
+            to="/dashboard"
+            replace
+          />
+        }
       />
     </Routes>
   );
