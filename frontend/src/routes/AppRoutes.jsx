@@ -5,6 +5,7 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import Properties from "../pages/properties/Properties";
+import PropertyDetails from "../pages/properties/PropertyDetails";
 import PropertyForm from "../pages/properties/PropertyForm";
 import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
@@ -26,6 +27,11 @@ function AppRoutes() {
           <Route
             path="/properties"
             element={<Properties />}
+          />
+
+          <Route
+            path="/properties/:id"
+            element={<PropertyDetails />}
           />
 
           <Route
