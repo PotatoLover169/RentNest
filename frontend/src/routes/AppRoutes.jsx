@@ -10,6 +10,7 @@ import PropertyForm from "../pages/properties/PropertyForm";
 import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
 import UnitForm from "../pages/units/UnitForm";
+import UnitDetails from "../pages/units/UnitDetails";
 import Tenancies from "../pages/tenancies/Tenancies";
 import Payments from "../pages/payments/Payments";
 import Maintenance from "../pages/maintenance/Maintenance";
@@ -53,6 +54,11 @@ function AppRoutes() {
           <Route
             path="/units/new"
             element={<UnitForm />}
+          />
+
+          <Route
+            path="/units/:id"
+            element={<UnitDetails />}
           />
 
           <Route
