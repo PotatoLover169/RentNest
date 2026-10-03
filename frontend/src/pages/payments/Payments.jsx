@@ -1,6 +1,5 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-
+import { Link } from "react-router-dom";
 import { getPayments } from "../../api/payments";
 
 const STATUS_OPTIONS = [
@@ -420,9 +419,12 @@ function Payments() {
                       className="transition hover:bg-slate-50/80"
                     >
                       <td className="whitespace-nowrap px-5 py-4 sm:px-6">
-                        <p className="text-sm font-semibold text-slate-900">
+                        <Link
+                          to={`/payments/${payment.id}`}
+                          className="text-sm font-semibold text-blue-600 transition hover:text-blue-800 hover:underline"
+                        >
                           {getPaymentReference(payment)}
-                        </p>
+                        </Link>
                         <p className="mt-1 text-xs text-slate-500">
                           ID: {payment.id}
                         </p>

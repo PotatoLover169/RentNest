@@ -13,6 +13,7 @@ import UnitForm from "../pages/units/UnitForm";
 import UnitDetails from "../pages/units/UnitDetails";
 import Tenancies from "../pages/tenancies/Tenancies";
 import Payments from "../pages/payments/Payments";
+import PaymentDetail from "../pages/payments/PaymentDetail";
 import Maintenance from "../pages/maintenance/Maintenance";
 import Notifications from "../pages/notifications/Notifications";
 
@@ -74,6 +75,11 @@ function AppRoutes() {
           <Route
             path="/payments"
             element={<Payments />}
+          />
+
+          <Route
+            path="/payments/:id"
+            element={<PaymentDetail />}
           />
 
           <Route
