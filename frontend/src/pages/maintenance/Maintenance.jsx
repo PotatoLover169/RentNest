@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getMaintenanceRequests } from "../../api/maintenance";
 
 function formatLabel(value, fallback = "—") {
@@ -194,7 +195,12 @@ function Maintenance() {
         matchesPriority
       );
     });
-  }, [requests, search, statusFilter, priorityFilter]);
+  }, [
+    requests,
+    search,
+    statusFilter,
+    priorityFilter,
+  ]);
 
   const priorities = useMemo(() => {
     return [
@@ -240,7 +246,9 @@ function Maintenance() {
             fill="none"
             stroke="currentColor"
             strokeWidth="1.8"
-            className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+            className={`h-4 w-4 ${
+              isLoading ? "animate-spin" : ""
+            }`}
             aria-hidden="true"
           >
             <path
@@ -248,12 +256,14 @@ function Maintenance() {
               strokeLinejoin="round"
               d="M20 7v5h-5M4 17v-5h5"
             />
+
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
               d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"
             />
           </svg>
+
           Refresh
         </button>
       </section>
@@ -308,6 +318,7 @@ function Maintenance() {
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="7" />
+
                 <path
                   strokeLinecap="round"
                   d="m20 20-4-4"
@@ -317,7 +328,9 @@ function Maintenance() {
               <input
                 type="search"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 placeholder="Search requests..."
                 aria-label="Search maintenance requests"
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -326,26 +339,50 @@ function Maintenance() {
 
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setStatusFilter(event.target.value)
+              }
               aria-label="Filter by status"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="ALL">All statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="CANCELLED">Cancelled</option>
+              <option value="ALL">
+                All statuses
+              </option>
+
+              <option value="PENDING">
+                Pending
+              </option>
+
+              <option value="IN_PROGRESS">
+                In Progress
+              </option>
+
+              <option value="COMPLETED">
+                Completed
+              </option>
+
+              <option value="CANCELLED">
+                Cancelled
+              </option>
             </select>
 
             <select
               value={priorityFilter}
-              onChange={(event) => setPriorityFilter(event.target.value)}
+              onChange={(event) =>
+                setPriorityFilter(event.target.value)
+              }
               aria-label="Filter by priority"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="ALL">All priorities</option>
+              <option value="ALL">
+                All priorities
+              </option>
+
               {priorities.map((priority) => (
-                <option key={priority} value={priority}>
+                <option
+                  key={priority}
+                  value={priority}
+                >
                   {formatLabel(priority)}
                 </option>
               ))}
@@ -385,36 +422,38 @@ function Maintenance() {
           </div>
         )}
 
-        {!isLoading && !error && requests.length === 0 && (
-          <div className="px-6 py-16 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                className="h-7 w-7 text-slate-500"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 8v4m0 4h.01M4.9 19h14.2c1.2 0 1.9-1.3 1.3-2.3L13.3 4.4c-.6-1-2-.9-2.6 0L3.6 16.7C3 17.7 3.7 19 4.9 19Z"
-                />
-              </svg>
+        {!isLoading &&
+          !error &&
+          requests.length === 0 && (
+            <div className="px-6 py-16 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  className="h-7 w-7 text-slate-500"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 8v4m0 4h.01M4.9 19h14.2c1.2 0 1.9-1.3 1.3-2.3L13.3 4.4c-.6-1-2-.9-2.6 0L3.6 16.7C3 17.7 3.7 19 4.9 19Z"
+                  />
+                </svg>
+              </div>
+
+              <h3 className="mt-4 text-base font-semibold text-slate-900">
+                No maintenance requests yet
+              </h3>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                Maintenance requests associated with your
+                account will appear here when available.
+              </p>
             </div>
-
-            <h3 className="mt-4 text-base font-semibold text-slate-900">
-              No maintenance requests yet
-            </h3>
-
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              Maintenance requests associated with your account
-              will appear here when available.
-            </p>
-          </div>
-        )}
+          )}
 
         {!isLoading &&
           !error &&
@@ -494,15 +533,19 @@ function Maintenance() {
                         className="transition hover:bg-slate-50/80"
                       >
                         <td className="max-w-sm px-5 py-4 sm:px-6">
-                          <p className="truncate text-sm font-semibold text-slate-900">
+                          <Link
+                            to={`/maintenance/${request.id}`}
+                            className="block truncate text-sm font-semibold text-slate-900 transition hover:text-blue-600"
+                          >
                             {getRequestTitle(request)}
-                          </p>
+                          </Link>
 
-                          {request.title && request.description && (
-                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                              {request.description}
-                            </p>
-                          )}
+                          {request.title &&
+                            request.description && (
+                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                {request.description}
+                              </p>
+                            )}
 
                           <p className="mt-1 text-xs text-slate-400">
                             Request #{request.id}
@@ -519,7 +562,10 @@ function Maintenance() {
                               request.priority
                             )}`}
                           >
-                            {formatLabel(request.priority, "Normal")}
+                            {formatLabel(
+                              request.priority,
+                              "Normal"
+                            )}
                           </span>
                         </td>
 
@@ -529,7 +575,10 @@ function Maintenance() {
                               request.status
                             )}`}
                           >
-                            {formatLabel(request.status, "Pending")}
+                            {formatLabel(
+                              request.status,
+                              "Pending"
+                            )}
                           </span>
                         </td>
 

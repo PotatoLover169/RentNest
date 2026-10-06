@@ -15,6 +15,7 @@ import Tenancies from "../pages/tenancies/Tenancies";
 import Payments from "../pages/payments/Payments";
 import PaymentDetail from "../pages/payments/PaymentDetail";
 import Maintenance from "../pages/maintenance/Maintenance";
+import MaintenanceDetail from "../pages/maintenance/MaintenanceDetail";
 import Notifications from "../pages/notifications/Notifications";
 
 function AppRoutes() {
@@ -85,6 +86,11 @@ function AppRoutes() {
           <Route
             path="/maintenance"
             element={<Maintenance />}
+          />
+
+          <Route
+            path="/maintenance/:id"
+            element={<MaintenanceDetail />}
           />
 
           <Route
