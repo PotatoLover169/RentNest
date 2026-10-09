@@ -1,13 +1,19 @@
+from datetime import date
+from decimal import Decimal
+
 from django.urls import reverse
 
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.tenancies.models import Tenancy, TenancyStatus
 from apps.accounts.models import User, UserRole
 from apps.properties.models import (
     Property,
     PropertyStatus,
     PropertyType,
+    Unit,
+    UnitStatus,
 )
 
 
@@ -101,9 +107,7 @@ class PropertyAPITests(APITestCase):
     # ==========================================================
 
     def property_list_url(self):
-        return reverse(
-            "properties:property-list-create",
-        )
+        return reverse("properties:property-list-create")
 
     def property_detail_url(self, property_id):
         return reverse(
@@ -122,9 +126,7 @@ class PropertyAPITests(APITestCase):
     # ==========================================================
 
     def test_unauthenticated_user_cannot_list_properties(self):
-        response = self.client.get(
-            self.property_list_url(),
-        )
+        response = self.client.get(self.property_list_url())
 
         self.assertEqual(
             response.status_code,
@@ -136,9 +138,7 @@ class PropertyAPITests(APITestCase):
     # ==========================================================
 
     def test_property_manager_can_create_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
             self.property_list_url(),
@@ -168,9 +168,7 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_tenant_cannot_create_property(self):
-        self.client.force_authenticate(
-            user=self.tenant,
-        )
+        self.client.force_authenticate(user=self.tenant)
 
         response = self.client.post(
             self.property_list_url(),
@@ -195,9 +193,7 @@ class PropertyAPITests(APITestCase):
     def test_property_manager_cannot_assign_another_manager_when_creating_property(
         self,
     ):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
             self.property_list_url(),
@@ -226,9 +222,7 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_admin_can_create_property_for_property_manager(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.post(
             self.property_list_url(),
@@ -258,9 +252,7 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_admin_cannot_create_property_without_manager(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.post(
             self.property_list_url(),
@@ -281,23 +273,16 @@ class PropertyAPITests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
 
-        self.assertIn(
-            "manager_id",
-            response.data,
-        )
+        self.assertIn("manager_id", response.data)
 
     # ==========================================================
     # PROPERTY LIST / OWNERSHIP
     # ==========================================================
 
     def test_manager_only_sees_owned_properties(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
-        response = self.client.get(
-            self.property_list_url(),
-        )
+        response = self.client.get(self.property_list_url())
 
         self.assertEqual(
             response.status_code,
@@ -309,24 +294,29 @@ class PropertyAPITests(APITestCase):
             for item in response.data["results"]
         ]
 
-        self.assertIn(
-            self.property.id,
-            property_ids,
-        )
-
-        self.assertNotIn(
-            self.other_property.id,
-            property_ids,
-        )
+        self.assertIn(self.property.id, property_ids)
+        self.assertNotIn(self.other_property.id, property_ids)
 
     def test_tenant_can_list_active_properties(self):
-        self.client.force_authenticate(
-            user=self.tenant,
+        unit = Unit.objects.create(
+            property=self.property,
+            unit_number="101",
+            monthly_rent=Decimal("15000.00"),
+            status=UnitStatus.OCCUPIED,
         )
 
-        response = self.client.get(
-            self.property_list_url(),
+        Tenancy.objects.create(
+            tenant=self.tenant,
+            unit=unit,
+            start_date=date(2026, 8, 1),
+            monthly_rent=Decimal("15000.00"),
+            security_deposit=Decimal("15000.00"),
+            status=TenancyStatus.ACTIVE,
         )
+
+        self.client.force_authenticate(user=self.tenant)
+
+        response = self.client.get(self.property_list_url())
 
         self.assertEqual(
             response.status_code,
@@ -338,24 +328,13 @@ class PropertyAPITests(APITestCase):
             for item in response.data["results"]
         ]
 
-        self.assertIn(
-            self.property.id,
-            property_ids,
-        )
-
-        self.assertNotIn(
-            self.inactive_property.id,
-            property_ids,
-        )
+        self.assertIn(self.property.id, property_ids)
+        self.assertNotIn(self.inactive_property.id, property_ids)
 
     def test_admin_can_list_all_properties(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
-        response = self.client.get(
-            self.property_list_url(),
-        )
+        response = self.client.get(self.property_list_url())
 
         self.assertEqual(
             response.status_code,
@@ -367,34 +346,19 @@ class PropertyAPITests(APITestCase):
             for item in response.data["results"]
         ]
 
-        self.assertIn(
-            self.property.id,
-            property_ids,
-        )
-
-        self.assertIn(
-            self.other_property.id,
-            property_ids,
-        )
-
-        self.assertIn(
-            self.inactive_property.id,
-            property_ids,
-        )
+        self.assertIn(self.property.id, property_ids)
+        self.assertIn(self.other_property.id, property_ids)
+        self.assertIn(self.inactive_property.id, property_ids)
 
     # ==========================================================
     # PROPERTY RETRIEVAL
     # ==========================================================
 
     def test_manager_can_retrieve_owned_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.get(
-            self.property_detail_url(
-                self.property.id,
-            ),
+            self.property_detail_url(self.property.id),
         )
 
         self.assertEqual(
@@ -402,20 +366,13 @@ class PropertyAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        self.assertEqual(
-            response.data["id"],
-            self.property.id,
-        )
+        self.assertEqual(response.data["id"], self.property.id)
 
     def test_manager_cannot_retrieve_another_managers_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.get(
-            self.property_detail_url(
-                self.other_property.id,
-            ),
+            self.property_detail_url(self.other_property.id),
         )
 
         self.assertEqual(
@@ -424,14 +381,10 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_admin_can_retrieve_any_property(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.get(
-            self.property_detail_url(
-                self.other_property.id,
-            ),
+            self.property_detail_url(self.other_property.id),
         )
 
         self.assertEqual(
@@ -439,27 +392,18 @@ class PropertyAPITests(APITestCase):
             status.HTTP_200_OK,
         )
 
-        self.assertEqual(
-            response.data["id"],
-            self.other_property.id,
-        )
+        self.assertEqual(response.data["id"], self.other_property.id)
 
     # ==========================================================
     # PROPERTY UPDATE
     # ==========================================================
 
     def test_manager_can_update_owned_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.patch(
-            self.property_detail_url(
-                self.property.id,
-            ),
-            {
-                "name": "Updated Sunrise Apartments",
-            },
+            self.property_detail_url(self.property.id),
+            {"name": "Updated Sunrise Apartments"},
             format="json",
         )
 
@@ -476,17 +420,11 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_manager_cannot_update_another_managers_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.patch(
-            self.property_detail_url(
-                self.other_property.id,
-            ),
-            {
-                "name": "Unauthorized Update",
-            },
+            self.property_detail_url(self.other_property.id),
+            {"name": "Unauthorized Update"},
             format="json",
         )
 
@@ -496,17 +434,11 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_admin_can_update_any_property(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.patch(
-            self.property_detail_url(
-                self.other_property.id,
-            ),
-            {
-                "name": "Admin Updated Property",
-            },
+            self.property_detail_url(self.other_property.id),
+            {"name": "Admin Updated Property"},
             format="json",
         )
 
@@ -523,17 +455,11 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_admin_cannot_change_property_manager_through_update(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.patch(
-            self.property_detail_url(
-                self.property.id,
-            ),
-            {
-                "manager_id": self.other_manager.id,
-            },
+            self.property_detail_url(self.property.id),
+            {"manager_id": self.other_manager.id},
             format="json",
         )
 
@@ -554,14 +480,10 @@ class PropertyAPITests(APITestCase):
     # ==========================================================
 
     def test_manager_can_deactivate_owned_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
-            self.property_deactivate_url(
-                self.property.id,
-            ),
+            self.property_deactivate_url(self.property.id),
             format="json",
         )
 
@@ -578,14 +500,10 @@ class PropertyAPITests(APITestCase):
         )
 
     def test_deactivation_does_not_delete_property(self):
-        self.client.force_authenticate(
-            user=self.manager,
-        )
+        self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
-            self.property_deactivate_url(
-                self.property.id,
-            ),
+            self.property_deactivate_url(self.property.id),
             format="json",
         )
 
@@ -595,20 +513,14 @@ class PropertyAPITests(APITestCase):
         )
 
         self.assertTrue(
-            Property.objects.filter(
-                id=self.property.id,
-            ).exists()
+            Property.objects.filter(id=self.property.id).exists()
         )
 
     def test_admin_can_deactivate_any_property(self):
-        self.client.force_authenticate(
-            user=self.admin,
-        )
+        self.client.force_authenticate(user=self.admin)
 
         response = self.client.post(
-            self.property_deactivate_url(
-                self.other_property.id,
-            ),
+            self.property_deactivate_url(self.other_property.id),
             format="json",
         )
 

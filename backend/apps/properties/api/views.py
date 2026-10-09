@@ -7,12 +7,12 @@ from rest_framework.response import Response
 
 from apps.accounts.models import UserRole
 from apps.accounts.permissions import IsAdminOrPropertyManager
+from apps.tenancies.models import TenancyStatus
 
 from apps.properties.models import (
     Property,
     PropertyStatus,
     Unit,
-    UnitStatus,
 )
 from apps.properties.permissions import IsPropertyManagerOrReadOnly
 from apps.properties.services import (
@@ -30,6 +30,7 @@ from .serializers import (
 # PROPERTY API
 # ============================================================
 
+
 class PropertyListCreateView(generics.ListCreateAPIView):
     serializer_class = PropertySerializer
 
@@ -46,17 +47,34 @@ class PropertyListCreateView(generics.ListCreateAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return Property.objects.all()
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return Property.objects.filter(
                 manager=user,
             )
 
-        return Property.objects.filter(
-            status=PropertyStatus.ACTIVE,
-        )
+        # ------------------------------------------------------
+        # TENANT
+        #
+        # A tenant may only see properties connected to
+        # their own ACTIVE tenancy.
+        # ------------------------------------------------------
+        if user.role == UserRole.TENANT:
+            return Property.objects.filter(
+                status=PropertyStatus.ACTIVE,
+                units__tenancies__tenant=user,
+                units__tenancies__status=TenancyStatus.ACTIVE,
+            ).distinct()
+
+        return Property.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -132,17 +150,34 @@ class PropertyDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return Property.objects.all()
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return Property.objects.filter(
                 manager=user,
             )
 
-        return Property.objects.filter(
-            status=PropertyStatus.ACTIVE,
-        )
+        # ------------------------------------------------------
+        # TENANT
+        #
+        # A tenant may only retrieve a property connected to
+        # their own ACTIVE tenancy.
+        # ------------------------------------------------------
+        if user.role == UserRole.TENANT:
+            return Property.objects.filter(
+                status=PropertyStatus.ACTIVE,
+                units__tenancies__tenant=user,
+                units__tenancies__status=TenancyStatus.ACTIVE,
+            ).distinct()
+
+        return Property.objects.none()
 
     def perform_update(self, serializer):
         if "manager" in serializer.validated_data:
@@ -172,9 +207,15 @@ class PropertyDeactivateView(generics.GenericAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return Property.objects.all()
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return Property.objects.filter(
                 manager=user,
@@ -192,9 +233,12 @@ class PropertyDeactivateView(generics.GenericAPIView):
         property_instance = self.get_object()
 
         try:
-            property_instance = PropertyService.deactivate_property(
-                property_instance=property_instance,
+            property_instance = (
+                PropertyService.deactivate_property(
+                    property_instance=property_instance,
+                )
             )
+
         except ValidationError as exc:
             raise ValidationError(
                 {
@@ -211,6 +255,7 @@ class PropertyDeactivateView(generics.GenericAPIView):
 # ============================================================
 # UNIT API
 # ============================================================
+
 
 class UnitListCreateView(generics.ListCreateAPIView):
     serializer_class = UnitSerializer
@@ -233,18 +278,36 @@ class UnitListCreateView(generics.ListCreateAPIView):
             "property__manager",
         )
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 property__manager=user,
             )
 
-        return queryset.filter(
-            property__status=PropertyStatus.ACTIVE,
-            status=UnitStatus.AVAILABLE,
-        )
+        # ------------------------------------------------------
+        # TENANT
+        #
+        # A tenant may only see the unit they currently rent.
+        # We intentionally do NOT filter by UnitStatus.AVAILABLE
+        # because an occupied unit is exactly what an active
+        # tenant should be able to access.
+        # ------------------------------------------------------
+        if user.role == UserRole.TENANT:
+            return queryset.filter(
+                property__status=PropertyStatus.ACTIVE,
+                tenancies__tenant=user,
+                tenancies__status=TenancyStatus.ACTIVE,
+            ).distinct()
+
+        return queryset.none()
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -274,12 +337,18 @@ class UnitListCreateView(generics.ListCreateAPIView):
         # ------------------------------------------------------
         # PROPERTY MANAGER
         # ------------------------------------------------------
-        else:
+        elif user.role == UserRole.PROPERTY_MANAGER:
             property_instance = get_object_or_404(
                 Property.objects.filter(
                     manager=user,
                 ),
                 pk=property_id,
+            )
+
+        else:
+            raise ValidationError(
+                "Only administrators and property managers "
+                "can create units."
             )
 
         UnitService.create_unit(
@@ -292,7 +361,10 @@ class UnitDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = UnitSerializer
 
     def get_permissions(self):
-        if self.request.method in ["PUT", "PATCH"]:
+        if self.request.method in [
+            "PUT",
+            "PATCH",
+        ]:
             return [
                 IsAdminOrPropertyManager(),
             ]
@@ -309,18 +381,31 @@ class UnitDetailView(generics.RetrieveUpdateAPIView):
             "property__manager",
         )
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return queryset
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return queryset.filter(
                 property__manager=user,
             )
 
-        return queryset.filter(
-            property__status=PropertyStatus.ACTIVE,
-            status=UnitStatus.AVAILABLE,
-        )
+        # ------------------------------------------------------
+        # TENANT
+        # ------------------------------------------------------
+        if user.role == UserRole.TENANT:
+            return queryset.filter(
+                property__status=PropertyStatus.ACTIVE,
+                tenancies__tenant=user,
+                tenancies__status=TenancyStatus.ACTIVE,
+            ).distinct()
+
+        return queryset.none()
 
     def perform_update(self, serializer):
         UnitService.update_unit(
@@ -340,12 +425,18 @@ class UnitStatusView(generics.GenericAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return Unit.objects.select_related(
                 "property",
                 "property__manager",
             )
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return Unit.objects.select_related(
                 "property",
@@ -374,6 +465,7 @@ class UnitStatusView(generics.GenericAPIView):
                 unit_instance=unit_instance,
                 status=new_status,
             )
+
         except ValidationError as exc:
             raise ValidationError(
                 {
@@ -398,12 +490,18 @@ class UnitDeactivateView(generics.GenericAPIView):
     def get_queryset(self) -> QuerySet:
         user = self.request.user
 
+        # ------------------------------------------------------
+        # ADMIN
+        # ------------------------------------------------------
         if user.role == UserRole.ADMIN:
             return Unit.objects.select_related(
                 "property",
                 "property__manager",
             )
 
+        # ------------------------------------------------------
+        # PROPERTY MANAGER
+        # ------------------------------------------------------
         if user.role == UserRole.PROPERTY_MANAGER:
             return Unit.objects.select_related(
                 "property",
@@ -427,6 +525,7 @@ class UnitDeactivateView(generics.GenericAPIView):
             unit_instance = UnitService.deactivate_unit(
                 unit_instance=unit_instance,
             )
+
         except ValidationError as exc:
             raise ValidationError(
                 {
