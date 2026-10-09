@@ -2,14 +2,58 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../context/useAuth";
 
-const navigationItems = [
-  { label: "Dashboard", path: "/dashboard" },
-  { label: "Properties", path: "/properties" },
-  { label: "Units", path: "/units" },
-  { label: "Tenancies", path: "/tenancies" },
-  { label: "Payments", path: "/payments" },
-  { label: "Maintenance", path: "/maintenance" },
-  { label: "Notifications", path: "/notifications" },
+const managementNavigation = [
+  {
+    label: "Dashboard",
+    path: "/dashboard",
+  },
+  {
+    label: "Properties",
+    path: "/properties",
+  },
+  {
+    label: "Units",
+    path: "/units",
+  },
+  {
+    label: "Tenancies",
+    path: "/tenancies",
+  },
+  {
+    label: "Payments",
+    path: "/payments",
+  },
+  {
+    label: "Maintenance",
+    path: "/maintenance",
+  },
+  {
+    label: "Notifications",
+    path: "/notifications",
+  },
+];
+
+const tenantNavigation = [
+  {
+    label: "Dashboard",
+    path: "/dashboard",
+  },
+  {
+    label: "My Rental",
+    path: "/my-rental",
+  },
+  {
+    label: "Payments",
+    path: "/payments",
+  },
+  {
+    label: "Maintenance",
+    path: "/maintenance",
+  },
+  {
+    label: "Notifications",
+    path: "/notifications",
+  },
 ];
 
 function getDisplayName(user) {
@@ -17,7 +61,10 @@ function getDisplayName(user) {
     return "User";
   }
 
-  const fullName = [user.first_name, user.last_name]
+  const fullName = [
+    user.first_name,
+    user.last_name,
+  ]
     .filter(Boolean)
     .join(" ")
     .trim();
@@ -28,13 +75,19 @@ function getDisplayName(user) {
 function getInitials(user) {
   const displayName = getDisplayName(user);
 
-  const words = displayName.split(/\s+/).filter(Boolean);
+  const words = displayName
+    .split(/\s+/)
+    .filter(Boolean);
 
   if (words.length >= 2) {
-    return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+    return `${words[0][0]}${words[
+      words.length - 1
+    ][0]}`.toUpperCase();
   }
 
-  return displayName.slice(0, 2).toUpperCase();
+  return displayName
+    .slice(0, 2)
+    .toUpperCase();
 }
 
 function DashboardLayout() {
@@ -42,6 +95,11 @@ function DashboardLayout() {
 
   const displayName = getDisplayName(user);
   const initials = getInitials(user);
+
+  const navigationItems =
+    user?.role === "TENANT"
+      ? tenantNavigation
+      : managementNavigation;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
