@@ -1,10 +1,8 @@
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
 from rest_framework import serializers
-
-from ..models import UserRole
-
 
 User = get_user_model()
 
@@ -13,6 +11,8 @@ class UserSerializer(serializers.ModelSerializer):
     """
     Serializer for exposing safe user information.
 
+    Users can update their own first and last names.
+    Email, role, and account metadata remain read-only.
     Passwords are intentionally excluded.
     """
 
@@ -33,10 +33,31 @@ class UserSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             "id",
+            "email",
             "full_name",
             "role",
             "date_joined",
         ]
+
+    def validate_first_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "First name cannot be blank."
+            )
+
+        return value
+
+    def validate_last_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Last name cannot be blank."
+            )
+
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -91,7 +112,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop("password_confirm")
-
         password = validated_data.pop("password")
 
         from ..services import AccountService

@@ -1,3 +1,4 @@
+
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -15,9 +16,7 @@ class RegisterView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-
         serializer.is_valid(raise_exception=True)
-
         user = serializer.save()
 
         return Response(
@@ -29,9 +28,11 @@ class RegisterView(generics.CreateAPIView):
         )
 
 
-class MeView(generics.RetrieveAPIView):
+class MeView(generics.RetrieveUpdateAPIView):
     """
-    Returns the currently authenticated user.
+    Retrieve or update the currently authenticated user's profile.
+
+    PATCH /api/auth/me/
     """
 
     serializer_class = UserSerializer
@@ -53,9 +54,7 @@ class LogoutView(generics.GenericAPIView):
 
         if not refresh_token:
             return Response(
-                {
-                    "detail": "Refresh token is required."
-                },
+                {"detail": "Refresh token is required."},
                 status=400,
             )
 
@@ -65,15 +64,11 @@ class LogoutView(generics.GenericAPIView):
 
         except Exception:
             return Response(
-                {
-                    "detail": "Invalid or expired refresh token."
-                },
+                {"detail": "Invalid or expired refresh token."},
                 status=400,
             )
 
         return Response(
-            {
-                "message": "Logged out successfully."
-            },
+            {"message": "Logged out successfully."},
             status=205,
         )
