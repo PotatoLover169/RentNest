@@ -1,3 +1,4 @@
+
 import {
   useCallback,
   useEffect,
@@ -8,6 +9,7 @@ import {
   getCurrentUser,
   loginUser,
   logoutUser,
+  updateCurrentUser,
 } from "../api/auth";
 
 import { AuthContext } from "./authContextDefinition";
@@ -87,6 +89,14 @@ export function AuthProvider({ children }) {
     return currentUser;
   };
 
+  const updateProfile = async (profile) => {
+    const updatedUser = await updateCurrentUser(profile);
+
+    setUser(updatedUser);
+
+    return updatedUser;
+  };
+
   const logout = async () => {
     const refreshToken = localStorage.getItem(
       REFRESH_TOKEN_KEY,
@@ -109,6 +119,7 @@ export function AuthProvider({ children }) {
         isLoading,
         login,
         logout,
+        updateProfile,
       }}
     >
       {children}

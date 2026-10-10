@@ -1,3 +1,4 @@
+
 import apiClient from "./client";
 
 export async function loginUser(credentials) {
@@ -20,6 +21,15 @@ export async function registerUser(data) {
 
 export async function getCurrentUser() {
   const response = await apiClient.get("/auth/me/");
+
+  return response.data;
+}
+
+export async function updateCurrentUser(profile) {
+  const response = await apiClient.patch(
+    "/auth/me/",
+    profile,
+  );
 
   return response.data;
 }
