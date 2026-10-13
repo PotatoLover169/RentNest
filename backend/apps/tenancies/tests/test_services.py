@@ -1,5 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
+
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -12,7 +14,6 @@ from apps.properties.models import (
     UnitStatus,
     UnitType,
 )
-
 from apps.tenancies.models import (
     Tenancy,
     TenancyStatus,
@@ -76,17 +77,11 @@ class TenancyServiceTests(TestCase):
             security_deposit=Decimal("15000.00"),
         )
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.PENDING,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
 
         self.unit.refresh_from_db()
 
-        self.assertEqual(
-            self.unit.status,
-            UnitStatus.AVAILABLE,
-        )
+        self.assertEqual(self.unit.status, UnitStatus.AVAILABLE)
 
     def test_create_active_tenancy_makes_unit_occupied(self):
         tenancy = TenancyService.create_tenancy(
@@ -98,17 +93,11 @@ class TenancyServiceTests(TestCase):
             status=TenancyStatus.ACTIVE,
         )
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.ACTIVE,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.ACTIVE)
 
         self.unit.refresh_from_db()
 
-        self.assertEqual(
-            self.unit.status,
-            UnitStatus.OCCUPIED,
-        )
+        self.assertEqual(self.unit.status, UnitStatus.OCCUPIED)
 
     def test_second_active_tenancy_for_same_unit_is_rejected(self):
         TenancyService.create_tenancy(
@@ -152,12 +141,17 @@ class TenancyServiceTests(TestCase):
         )
 
         original_updated_at = tenancy.updated_at
+        future_updated_at = original_updated_at + timedelta(seconds=2)
 
-        tenancy = TenancyService.update_tenancy(
-            tenancy_instance=tenancy,
-            monthly_rent=Decimal("16000.00"),
-            notes="Rent updated.",
-        )
+        with patch(
+            "django.db.models.fields.timezone.now",
+            return_value=future_updated_at,
+        ):
+            tenancy = TenancyService.update_tenancy(
+                tenancy_instance=tenancy,
+                monthly_rent=Decimal("16000.00"),
+                notes="Rent updated.",
+            )
 
         tenancy.refresh_from_db()
 
@@ -193,10 +187,7 @@ class TenancyServiceTests(TestCase):
 
         tenancy.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.PENDING,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
 
     def test_update_tenancy_cannot_change_tenant(self):
         tenancy = TenancyService.create_tenancy(
@@ -215,10 +206,7 @@ class TenancyServiceTests(TestCase):
 
         tenancy.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.tenant,
-            self.tenant,
-        )
+        self.assertEqual(tenancy.tenant, self.tenant)
 
     def test_update_tenancy_cannot_change_unit(self):
         second_unit = Unit.objects.create(
@@ -247,10 +235,7 @@ class TenancyServiceTests(TestCase):
 
         tenancy.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.unit,
-            self.unit,
-        )
+        self.assertEqual(tenancy.unit, self.unit)
 
     # ============================================================
     # ACTIVATION
@@ -265,10 +250,7 @@ class TenancyServiceTests(TestCase):
             security_deposit=Decimal("15000.00"),
         )
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.PENDING,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
 
         tenancy = TenancyService.activate_tenancy(
             tenancy_instance=tenancy,
@@ -277,15 +259,8 @@ class TenancyServiceTests(TestCase):
         tenancy.refresh_from_db()
         self.unit.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.ACTIVE,
-        )
-
-        self.assertEqual(
-            self.unit.status,
-            UnitStatus.OCCUPIED,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.ACTIVE)
+        self.assertEqual(self.unit.status, UnitStatus.OCCUPIED)
 
     def test_activate_tenancy_is_rejected_when_unit_has_active_tenancy(self):
         TenancyService.create_tenancy(
@@ -348,20 +323,9 @@ class TenancyServiceTests(TestCase):
         tenancy.refresh_from_db()
         self.unit.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.ENDED,
-        )
-
-        self.assertEqual(
-            tenancy.end_date,
-            date(2026, 8, 31),
-        )
-
-        self.assertEqual(
-            self.unit.status,
-            UnitStatus.AVAILABLE,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.ENDED)
+        self.assertEqual(tenancy.end_date, date(2026, 8, 31))
+        self.assertEqual(self.unit.status, UnitStatus.AVAILABLE)
 
     def test_pending_tenancy_cannot_be_ended(self):
         tenancy = TenancyService.create_tenancy(
@@ -380,7 +344,4 @@ class TenancyServiceTests(TestCase):
 
         tenancy.refresh_from_db()
 
-        self.assertEqual(
-            tenancy.status,
-            TenancyStatus.PENDING,
-        )
+        self.assertEqual(tenancy.status, TenancyStatus.PENDING)
