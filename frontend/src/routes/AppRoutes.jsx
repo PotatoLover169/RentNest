@@ -1,6 +1,6 @@
-
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import { useAuth } from "../context/useAuth";
 import DashboardLayout from "../layouts/DashboardLayout";
 import Dashboard from "../pages/dashboard/Dashboard";
 import Login from "../pages/auth/Login";
@@ -8,7 +8,6 @@ import Register from "../pages/auth/Register";
 import Properties from "../pages/properties/Properties";
 import PropertyDetails from "../pages/properties/PropertyDetails";
 import PropertyForm from "../pages/properties/PropertyForm";
-import ProtectedRoute from "./ProtectedRoute";
 import Units from "../pages/units/Units";
 import UnitForm from "../pages/units/UnitForm";
 import UnitDetails from "../pages/units/UnitDetails";
@@ -19,6 +18,23 @@ import Maintenance from "../pages/maintenance/Maintenance";
 import MaintenanceDetail from "../pages/maintenance/MaintenanceDetail";
 import Notifications from "../pages/notifications/Notifications";
 import Settings from "../pages/settings/Settings";
+import MyRental from "../pages/tenant/MyRental";
+import ProtectedRoute from "./ProtectedRoute";
+
+function RoleRoute({ allowedRoles }) {
+  const { user } = useAuth();
+  const role = String(user?.role || "").toUpperCase();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!allowedRoles.includes(role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <></>;
+}
 
 function AppRoutes() {
   return (
@@ -30,50 +46,64 @@ function AppRoutes() {
             element={<Dashboard />}
           />
 
-          <Route
-            path="/properties"
-            element={<Properties />}
-          />
+          <Route element={<RoleRoute allowedRoles={["ADMIN", "PROPERTY_MANAGER"]} />}>
+            <Route
+              path="/properties"
+              element={<Properties />}
+            />
+
+            <Route
+              path="/properties/new"
+              element={<PropertyForm />}
+            />
+
+            <Route
+              path="/properties/:id/edit"
+              element={<PropertyForm />}
+            />
+
+            <Route
+              path="/properties/:id"
+              element={<PropertyDetails />}
+            />
+
+            <Route
+              path="/units"
+              element={<Units />}
+            />
+
+            <Route
+              path="/units/new"
+              element={<UnitForm />}
+            />
+
+            <Route
+              path="/units/:id/edit"
+              element={<UnitForm />}
+            />
+
+            <Route
+              path="/units/:id"
+              element={<UnitDetails />}
+            />
+
+            <Route
+              path="/tenancies"
+              element={<Tenancies />}
+            />
+          </Route>
 
           <Route
-            path="/properties/:id"
-            element={<PropertyDetails />}
-          />
-
-          <Route
-            path="/properties/new"
-            element={<PropertyForm />}
-          />
-
-          <Route
-            path="/properties/:id/edit"
-            element={<PropertyForm />}
-          />
-
-          <Route
-            path="/units"
-            element={<Units />}
-          />
-
-          <Route
-            path="/units/new"
-            element={<UnitForm />}
-          />
-
-          <Route
-            path="/units/:id"
-            element={<UnitDetails />}
-          />
-
-          <Route
-            path="/units/:id/edit"
-            element={<UnitForm />}
-          />
-
-          <Route
-            path="/tenancies"
-            element={<Tenancies />}
-          />
+            path="/my-rental"
+            element={
+              <RoleRoute allowedRoles={["TENANT"]} />
+            }
+          >
+            <Route
+              index
+              element={<MyRental />}
+            />
+          </Route>
 
           <Route
             path="/payments"
@@ -119,12 +149,7 @@ function AppRoutes() {
 
       <Route
         path="*"
-        element={
-          <Navigate
-            to="/dashboard"
-            replace
-          />
-        }
+        element={<Navigate to="/dashboard" replace />}
       />
     </Routes>
   );

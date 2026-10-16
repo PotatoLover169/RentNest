@@ -1,18 +1,39 @@
-
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../context/useAuth";
 
-const navigationItems = [
-  { label: "Dashboard", path: "/dashboard" },
-  { label: "Properties", path: "/properties" },
-  { label: "Units", path: "/units" },
-  { label: "Tenancies", path: "/tenancies" },
-  { label: "Payments", path: "/payments" },
-  { label: "Maintenance", path: "/maintenance" },
-  { label: "Notifications", path: "/notifications" },
-  { label: "Settings", path: "/settings" },
-];
+const navigationByRole = {
+  ADMIN: [
+    { label: "Dashboard", path: "/dashboard" },
+    { label: "Properties", path: "/properties" },
+    { label: "Units", path: "/units" },
+    { label: "Tenancies", path: "/tenancies" },
+    { label: "Payments", path: "/payments" },
+    { label: "Maintenance", path: "/maintenance" },
+    { label: "Notifications", path: "/notifications" },
+    { label: "Settings", path: "/settings" },
+  ],
+
+  PROPERTY_MANAGER: [
+    { label: "Dashboard", path: "/dashboard" },
+    { label: "Properties", path: "/properties" },
+    { label: "Units", path: "/units" },
+    { label: "Tenancies", path: "/tenancies" },
+    { label: "Payments", path: "/payments" },
+    { label: "Maintenance", path: "/maintenance" },
+    { label: "Notifications", path: "/notifications" },
+    { label: "Settings", path: "/settings" },
+  ],
+
+  TENANT: [
+    { label: "Dashboard", path: "/dashboard" },
+    { label: "My Rental", path: "/my-rental" },
+    { label: "Payments", path: "/payments" },
+    { label: "Maintenance", path: "/maintenance" },
+    { label: "Notifications", path: "/notifications" },
+    { label: "Settings", path: "/settings" },
+  ],
+};
 
 function getDisplayName(user) {
   if (!user) {
@@ -43,6 +64,12 @@ function DashboardLayout() {
 
   const displayName = getDisplayName(user);
   const initials = getInitials(user);
+  const role = String(user?.role || "").toUpperCase();
+
+  const navigationItems = navigationByRole[role] || [
+    { label: "Dashboard", path: "/dashboard" },
+    { label: "Settings", path: "/settings" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
