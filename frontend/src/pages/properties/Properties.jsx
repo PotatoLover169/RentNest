@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getProperties } from "../../api/properties";
@@ -21,6 +22,7 @@ function Properties() {
     next: null,
     previous: null,
   });
+  const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -60,6 +62,30 @@ function Properties() {
 
     return parts.length > 0 ? parts.join(", ") : "—";
   };
+
+  const filteredProperties = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return properties;
+    }
+
+    return properties.filter((property) => {
+      const searchableValues = [
+        property.name,
+        property.address_line,
+        property.city,
+        property.province,
+        property.postal_code,
+      ];
+
+      return searchableValues.some(
+        (value) =>
+          typeof value === "string" &&
+          value.toLowerCase().includes(query),
+      );
+    });
+  }, [properties, searchTerm]);
 
   const getStatusVariant = (status) => {
     const normalizedStatus = status?.toLowerCase();
@@ -127,95 +153,145 @@ function Properties() {
 
       {!isLoading && !error && properties.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-slate-950">
                 Property List
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {pagination.count}{" "}
-                {pagination.count === 1
-                  ? "property"
-                  : "properties"}
+                {searchTerm.trim()
+                  ? `${filteredProperties.length} of ${properties.length} ${
+                      properties.length === 1
+                        ? "property"
+                        : "properties"
+                    } shown`
+                  : `${pagination.count} ${
+                      pagination.count === 1
+                        ? "property"
+                        : "properties"
+                    }`}
               </p>
+            </div>
+
+            <div className="w-full sm:max-w-sm">
+              <label
+                htmlFor="property-search"
+                className="sr-only"
+              >
+                Search properties
+              </label>
+
+              <input
+                id="property-search"
+                type="search"
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(event.target.value)
+                }
+                placeholder="Search name, city, or address..."
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Property
-                  </th>
+          {filteredProperties.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <h3 className="font-semibold text-slate-900">
+                No matching properties
+              </h3>
 
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Address
-                  </th>
+              <p className="mt-2 text-sm text-slate-500">
+                Try another property name, city, or address.
+              </p>
 
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Status
-                  </th>
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => setSearchTerm("")}
+              >
+                Clear Search
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Property
+                    </th>
 
-                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Address
+                    </th>
 
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {properties.map((property) => (
-                  <tr
-                    key={property.id}
-                    className="transition hover:bg-slate-50"
-                  >
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <p className="font-medium text-slate-900">
-                        {property.name}
-                      </p>
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Status
+                    </th>
 
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      {formatAddress(property)}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <span
-                        className={[
-                          "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                          getStatusVariant(property.status) ===
-                            "success"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : getStatusVariant(
-                                  property.status,
-                                ) === "danger"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-slate-100 text-slate-700",
-                        ].join(" ")}
-                      >
-                        {property.status || "Active"}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          navigate(
-                            `/properties/${property.id}`,
-                          )
-                        }
-                      >
-                        View
-                      </Button>
-                    </td>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {filteredProperties.map((property) => {
+                    const statusVariant = getStatusVariant(
+                      property.status,
+                    );
+
+                    return (
+                      <tr
+                        key={property.id}
+                        className="transition hover:bg-slate-50"
+                      >
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <p className="font-medium text-slate-900">
+                            {property.name}
+                          </p>
+                        </td>
+
+                        <td className="px-6 py-4 text-sm text-slate-500">
+                          {formatAddress(property)}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                              statusVariant === "success"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : statusVariant === "danger"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-slate-100 text-slate-700",
+                            ].join(" ")}
+                          >
+                            {property.status || "Active"}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              navigate(
+                                `/properties/${property.id}`,
+                              )
+                            }
+                          >
+                            View
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
     </div>
