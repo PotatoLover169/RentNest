@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -58,7 +59,7 @@ function formatAddress(property) {
     property.postal_code,
   ].filter(Boolean);
 
-  return parts.length > 0 ? parts.join(", ") : "—";
+  return parts.length > 0 ? parts.join(", ") : "";
 }
 
 function PropertyDetails() {
@@ -71,6 +72,7 @@ function PropertyDetails() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   const loadProperty = useCallback(async () => {
     try {
@@ -87,10 +89,37 @@ function PropertyDetails() {
   }, [id]);
 
   useEffect(() => {
-    // Data fetching is intentionally triggered when the page loads.
+    // Fetch the selected property's details on page load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProperty();
   }, [loadProperty]);
+
+  const handleCopyAddress = async () => {
+    const address = property ? formatAddress(property) : "";
+
+    if (!address) {
+      setCopyMessage("No property address is available to copy.");
+      return;
+    }
+
+    setCopyMessage("");
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        setCopyMessage(
+          "Clipboard access is unavailable. Please copy the address manually.",
+        );
+        return;
+      }
+
+      await navigator.clipboard.writeText(address);
+      setCopyMessage("Address copied to clipboard.");
+    } catch {
+      setCopyMessage(
+        "Unable to copy the address. Please copy it manually.",
+      );
+    }
+  };
 
   const handleDeactivate = async () => {
     const confirmed = window.confirm(
@@ -171,6 +200,13 @@ function PropertyDetails() {
     );
   }
 
+  const address = formatAddress(property);
+  const normalizedStatus = property.status?.toLowerCase();
+
+  const isInactive =
+    normalizedStatus === "inactive" ||
+    normalizedStatus === "deactivated";
+
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <PageHeader
@@ -215,6 +251,20 @@ function PropertyDetails() {
         </div>
       )}
 
+      {copyMessage && (
+        <div
+          role="status"
+          className={[
+            "rounded-lg border px-4 py-3 text-sm",
+            copyMessage === "Address copied to clipboard."
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-200 bg-amber-50 text-amber-800",
+          ].join(" ")}
+        >
+          {copyMessage}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="p-6 lg:col-span-2">
           <div className="flex items-start justify-between gap-4">
@@ -228,9 +278,7 @@ function PropertyDetails() {
               </h2>
             </div>
 
-            <Badge
-              variant={getStatusVariant(property.status)}
-            >
+            <Badge variant={getStatusVariant(property.status)}>
               {property.status || "Active"}
             </Badge>
           </div>
@@ -257,12 +305,23 @@ function PropertyDetails() {
             </div>
 
             <div className="sm:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Address
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Address
+                </p>
 
-              <p className="mt-1 text-sm font-medium text-slate-900">
-                {formatAddress(property)}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleCopyAddress}
+                  disabled={!address}
+                >
+                  Copy Address
+                </Button>
+              </div>
+
+              <p className="mt-2 break-words text-sm font-medium text-slate-900">
+                {address || "No address has been added."}
               </p>
             </div>
           </div>
@@ -292,13 +351,7 @@ function PropertyDetails() {
               className="w-full"
               variant="danger"
               onClick={handleDeactivate}
-              disabled={
-                isDeactivating ||
-                property.status?.toLowerCase() ===
-                  "inactive" ||
-                property.status?.toLowerCase() ===
-                  "deactivated"
-              }
+              disabled={isDeactivating || isInactive}
             >
               {isDeactivating
                 ? "Deactivating..."
