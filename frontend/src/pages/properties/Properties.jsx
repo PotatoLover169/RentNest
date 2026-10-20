@@ -1,5 +1,10 @@
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getProperties } from "../../api/properties";
@@ -23,6 +28,7 @@ function Properties() {
     previous: null,
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,8 +52,7 @@ function Properties() {
   }, []);
 
   useEffect(() => {
-    // Data fetching is intentionally triggered on mount.
-    // The called function manages loading/error/result state.
+    // Fetch properties when the page is mounted.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProperties();
   }, [loadProperties]);
@@ -60,32 +65,8 @@ function Properties() {
       property.postal_code,
     ].filter(Boolean);
 
-    return parts.length > 0 ? parts.join(", ") : "—";
+    return parts.length ? parts.join(", ") : "—";
   };
-
-  const filteredProperties = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-
-    if (!query) {
-      return properties;
-    }
-
-    return properties.filter((property) => {
-      const searchableValues = [
-        property.name,
-        property.address_line,
-        property.city,
-        property.province,
-        property.postal_code,
-      ];
-
-      return searchableValues.some(
-        (value) =>
-          typeof value === "string" &&
-          value.toLowerCase().includes(query),
-      );
-    });
-  }, [properties, searchTerm]);
 
   const getStatusVariant = (status) => {
     const normalizedStatus = status?.toLowerCase();
@@ -105,6 +86,43 @@ function Properties() {
     }
 
     return "default";
+  };
+
+  const filteredProperties = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return properties.filter((property) => {
+      const normalizedStatus =
+        property.status?.toLowerCase() || "active";
+
+      const matchesSearch =
+        !query ||
+        [
+          property.name,
+          property.address_line,
+          property.city,
+          property.province,
+          property.postal_code,
+        ].some(
+          (value) =>
+            typeof value === "string" &&
+            value.toLowerCase().includes(query),
+        );
+
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" &&
+          ["active", "available"].includes(normalizedStatus)) ||
+        (statusFilter === "inactive" &&
+          ["inactive", "deactivated"].includes(normalizedStatus));
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [properties, searchTerm, statusFilter]);
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
   };
 
   return (
@@ -153,45 +171,63 @@ function Properties() {
 
       {!isLoading && !error && properties.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5">
             <div>
               <h2 className="font-semibold text-slate-950">
                 Property List
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {searchTerm.trim()
-                  ? `${filteredProperties.length} of ${properties.length} ${
-                      properties.length === 1
-                        ? "property"
-                        : "properties"
-                    } shown`
-                  : `${pagination.count} ${
-                      pagination.count === 1
-                        ? "property"
-                        : "properties"
-                    }`}
+                Showing {filteredProperties.length} of{" "}
+                {properties.length} loaded properties
+                {pagination.count > properties.length
+                  ? ` (${pagination.count} total)`
+                  : ""}
               </p>
             </div>
 
-            <div className="w-full sm:max-w-sm">
-              <label
-                htmlFor="property-search"
-                className="sr-only"
-              >
-                Search properties
-              </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="property-search"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Search properties
+                </label>
 
-              <input
-                id="property-search"
-                type="search"
-                value={searchTerm}
-                onChange={(event) =>
-                  setSearchTerm(event.target.value)
-                }
-                placeholder="Search name, city, or address..."
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
+                <input
+                  id="property-search"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) =>
+                    setSearchTerm(event.target.value)
+                  }
+                  placeholder="Name, city, or address..."
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="property-status-filter"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Filter by status
+                </label>
+
+                <select
+                  id="property-status-filter"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -202,15 +238,15 @@ function Properties() {
               </h3>
 
               <p className="mt-2 text-sm text-slate-500">
-                Try another property name, city, or address.
+                Try changing your search or status filter.
               </p>
 
               <Button
                 variant="secondary"
                 className="mt-4"
-                onClick={() => setSearchTerm("")}
+                onClick={resetFilters}
               >
-                Clear Search
+                Clear Filters
               </Button>
             </div>
           ) : (
