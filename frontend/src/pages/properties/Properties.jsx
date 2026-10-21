@@ -85,6 +85,24 @@ function Properties() {
     loadProperties();
   }, [loadProperties]);
 
+  const summary = useMemo(() => {
+    const active = properties.filter((property) => {
+      const status = (property.status || "active").toLowerCase();
+      return status === "active" || status === "available";
+    }).length;
+
+    const inactive = properties.filter((property) => {
+      const status = (property.status || "active").toLowerCase();
+      return status === "inactive" || status === "deactivated";
+    }).length;
+
+    return {
+      total: pagination.count || properties.length,
+      active,
+      inactive,
+    };
+  }, [properties, pagination.count]);
+
   const filteredProperties = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
@@ -183,223 +201,270 @@ function Properties() {
         />
       )}
 
-      {!isLoading && !error && properties.length === 0 && (
-        <EmptyState
-          title="No properties yet"
-          description="Create your first rental property to start managing your portfolio."
-          action={
-            <Button onClick={() => navigate("/properties/new")}>
-              Add Property
-            </Button>
-          }
-        />
-      )}
+      {!isLoading && !error && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Card className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    Total Properties
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-slate-950">
+                    {summary.total}
+                  </p>
+                </div>
 
-      {!isLoading && !error && properties.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="space-y-4 border-b border-slate-200 px-6 py-5">
-            <div>
-              <h2 className="font-semibold text-slate-950">
-                Property List
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Showing {filteredProperties.length} of{" "}
-                {properties.length} loaded{" "}
-                {properties.length === 1
-                  ? "property"
-                  : "properties"}
-                {pagination.count > properties.length
-                  ? ` (${pagination.count} total on the server)`
-                  : ""}
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label
-                  htmlFor="property-search"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
-                >
-                  Search properties
-                </label>
-
-                <input
-                  id="property-search"
-                  type="search"
-                  value={searchTerm}
-                  onChange={(event) =>
-                    setSearchTerm(event.target.value)
-                  }
-                  placeholder="Name, city, or address..."
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600">
+                  <span aria-hidden="true">⌂</span>
+                </div>
               </div>
+            </Card>
 
-              <div>
-                <label
-                  htmlFor="property-status-filter"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
-                >
-                  Filter by status
-                </label>
+            <Card className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    Active Properties
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-emerald-600">
+                    {summary.active}
+                  </p>
+                </div>
 
-                <select
-                  id="property-status-filter"
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="deactivated">Deactivated</option>
-                </select>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl text-emerald-600">
+                  <span aria-hidden="true">✓</span>
+                </div>
               </div>
+            </Card>
 
-              <div>
-                <label
-                  htmlFor="property-sort"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
-                >
-                  Sort properties
-                </label>
+            <Card className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">
+                    Inactive Properties
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-slate-600">
+                    {summary.inactive}
+                  </p>
+                </div>
 
-                <select
-                  id="property-sort"
-                  value={sortBy}
-                  onChange={(event) =>
-                    setSortBy(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="name-asc">
-                    Name: A to Z
-                  </option>
-                  <option value="name-desc">
-                    Name: Z to A
-                  </option>
-                  <option value="status-asc">
-                    Status: A to Z
-                  </option>
-                  <option value="status-desc">
-                    Status: Z to A
-                  </option>
-                </select>
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-600">
+                  <span aria-hidden="true">—</span>
+                </div>
               </div>
-            </div>
-
-            {(searchTerm || statusFilter !== "all" || sortBy !== "name-asc") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-              >
-                Reset search, filters, and sorting
-              </Button>
-            )}
+            </Card>
           </div>
 
-          {filteredProperties.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <h3 className="font-semibold text-slate-900">
-                No matching properties
-              </h3>
-
-              <p className="mt-2 text-sm text-slate-500">
-                Try a different search term or status.
-              </p>
-
-              <Button
-                variant="secondary"
-                className="mt-4"
-                onClick={clearFilters}
-              >
-                Reset
-              </Button>
-            </div>
+          {properties.length === 0 ? (
+            <EmptyState
+              title="No properties yet"
+              description="Create your first rental property to start managing your portfolio."
+              action={
+                <Button onClick={() => navigate("/properties/new")}>
+                  Add Property
+                </Button>
+              }
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Property
-                    </th>
+            <Card className="overflow-hidden">
+              <div className="space-y-4 border-b border-slate-200 px-6 py-5">
+                <div>
+                  <h2 className="font-semibold text-slate-950">
+                    Property List
+                  </h2>
 
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Address
-                    </th>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Showing {filteredProperties.length} of{" "}
+                    {properties.length} loaded{" "}
+                    {properties.length === 1
+                      ? "property"
+                      : "properties"}
+                    {pagination.count > properties.length
+                      ? ` (${pagination.count} total on the server)`
+                      : ""}
+                  </p>
+                </div>
 
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Status
-                    </th>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <label
+                      htmlFor="property-search"
+                      className="mb-1.5 block text-sm font-medium text-slate-700"
+                    >
+                      Search properties
+                    </label>
 
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+                    <input
+                      id="property-search"
+                      type="search"
+                      value={searchTerm}
+                      onChange={(event) =>
+                        setSearchTerm(event.target.value)
+                      }
+                      placeholder="Name, city, or address..."
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
 
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {filteredProperties.map((property) => {
-                    const statusVariant = getStatusVariant(
-                      property.status,
-                    );
+                  <div>
+                    <label
+                      htmlFor="property-status-filter"
+                      className="mb-1.5 block text-sm font-medium text-slate-700"
+                    >
+                      Filter by status
+                    </label>
 
-                    return (
-                      <tr
-                        key={property.id}
-                        className="transition hover:bg-slate-50"
-                      >
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <p className="font-medium text-slate-900">
-                            {property.name}
-                          </p>
-                        </td>
+                    <select
+                      id="property-status-filter"
+                      value={statusFilter}
+                      onChange={(event) =>
+                        setStatusFilter(event.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="deactivated">Deactivated</option>
+                    </select>
+                  </div>
 
-                        <td className="px-6 py-4 text-sm text-slate-500">
-                          {formatAddress(property)}
-                        </td>
+                  <div>
+                    <label
+                      htmlFor="property-sort"
+                      className="mb-1.5 block text-sm font-medium text-slate-700"
+                    >
+                      Sort properties
+                    </label>
 
-                        <td className="px-6 py-4">
-                          <span
-                            className={[
-                              "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                              statusVariant === "success"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : statusVariant === "danger"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-slate-100 text-slate-700",
-                            ].join(" ")}
-                          >
-                            {property.status || "Active"}
-                          </span>
-                        </td>
+                    <select
+                      id="property-sort"
+                      value={sortBy}
+                      onChange={(event) =>
+                        setSortBy(event.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="name-asc">Name: A to Z</option>
+                      <option value="name-desc">Name: Z to A</option>
+                      <option value="status-asc">Status: A to Z</option>
+                      <option value="status-desc">Status: Z to A</option>
+                    </select>
+                  </div>
+                </div>
 
-                        <td className="px-6 py-4 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              navigate(
-                                `/properties/${property.id}`,
-                              )
-                            }
-                          >
-                            View
-                          </Button>
-                        </td>
+                {(searchTerm ||
+                  statusFilter !== "all" ||
+                  sortBy !== "name-asc") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                  >
+                    Reset search, filters, and sorting
+                  </Button>
+                )}
+              </div>
+
+              {filteredProperties.length === 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <h3 className="font-semibold text-slate-900">
+                    No matching properties
+                  </h3>
+
+                  <p className="mt-2 text-sm text-slate-500">
+                    Try a different search term or status.
+                  </p>
+
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={clearFilters}
+                  >
+                    Reset
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Property
+                        </th>
+
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Address
+                        </th>
+
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Status
+                        </th>
+
+                        <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Actions
+                        </th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {filteredProperties.map((property) => {
+                        const statusVariant = getStatusVariant(
+                          property.status,
+                        );
+
+                        return (
+                          <tr
+                            key={property.id}
+                            className="transition hover:bg-slate-50"
+                          >
+                            <td className="whitespace-nowrap px-6 py-4">
+                              <p className="font-medium text-slate-900">
+                                {property.name}
+                              </p>
+                            </td>
+
+                            <td className="px-6 py-4 text-sm text-slate-500">
+                              {formatAddress(property)}
+                            </td>
+
+                            <td className="px-6 py-4">
+                              <span
+                                className={[
+                                  "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                                  statusVariant === "success"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : statusVariant === "danger"
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-slate-100 text-slate-700",
+                                ].join(" ")}
+                              >
+                                {property.status || "Active"}
+                              </span>
+                            </td>
+
+                            <td className="px-6 py-4 text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  navigate(`/properties/${property.id}`)
+                                }
+                              >
+                                View
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           )}
-        </Card>
+        </>
       )}
     </div>
   );
