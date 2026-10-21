@@ -169,6 +169,11 @@ function Properties() {
     setSortBy("name-asc");
   };
 
+  const hasActiveFilters =
+    searchTerm.trim() !== "" ||
+    statusFilter !== "all" ||
+    sortBy !== "name-asc";
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
@@ -325,6 +330,7 @@ function Properties() {
                     >
                       <option value="all">All statuses</option>
                       <option value="active">Active</option>
+                      <option value="available">Available</option>
                       <option value="inactive">Inactive</option>
                       <option value="deactivated">Deactivated</option>
                     </select>
@@ -354,16 +360,20 @@ function Properties() {
                   </div>
                 </div>
 
-                {(searchTerm ||
-                  statusFilter !== "all" ||
-                  sortBy !== "name-asc") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                  >
-                    Reset search, filters, and sorting
-                  </Button>
+                {hasActiveFilters && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-slate-500">
+                      Search and filter settings are applied.
+                    </p>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={clearFilters}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -382,7 +392,7 @@ function Properties() {
                     className="mt-4"
                     onClick={clearFilters}
                   >
-                    Reset
+                    Clear Filters
                   </Button>
                 </div>
               ) : (
