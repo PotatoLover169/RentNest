@@ -1,10 +1,5 @@
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getProperties } from "../../api/properties";
@@ -18,6 +13,37 @@ import {
 } from "../../components/ui";
 import { getPagination, getResults } from "../../utils/api";
 
+function getStatusVariant(status) {
+  const normalizedStatus = status?.toLowerCase();
+
+  if (
+    normalizedStatus === "active" ||
+    normalizedStatus === "available"
+  ) {
+    return "success";
+  }
+
+  if (
+    normalizedStatus === "inactive" ||
+    normalizedStatus === "deactivated"
+  ) {
+    return "danger";
+  }
+
+  return "default";
+}
+
+function formatAddress(property) {
+  const parts = [
+    property.address_line,
+    property.city,
+    property.province,
+    property.postal_code,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "—";
+}
+
 function Properties() {
   const navigate = useNavigate();
 
@@ -29,6 +55,7 @@ function Properties() {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("name-asc");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -44,6 +71,7 @@ function Properties() {
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
+          requestError?.response?.data?.detail ||
           "Unable to load properties.",
       );
     } finally {
@@ -52,77 +80,75 @@ function Properties() {
   }, []);
 
   useEffect(() => {
-    // Fetch properties when the page is mounted.
+    // Fetch the property list when the page mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProperties();
   }, [loadProperties]);
 
-  const formatAddress = (property) => {
-    const parts = [
-      property.address_line,
-      property.city,
-      property.province,
-      property.postal_code,
-    ].filter(Boolean);
-
-    return parts.length ? parts.join(", ") : "—";
-  };
-
-  const getStatusVariant = (status) => {
-    const normalizedStatus = status?.toLowerCase();
-
-    if (
-      normalizedStatus === "active" ||
-      normalizedStatus === "available"
-    ) {
-      return "success";
-    }
-
-    if (
-      normalizedStatus === "inactive" ||
-      normalizedStatus === "deactivated"
-    ) {
-      return "danger";
-    }
-
-    return "default";
-  };
-
   const filteredProperties = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    return properties.filter((property) => {
-      const normalizedStatus =
-        property.status?.toLowerCase() || "active";
+    const filtered = properties.filter((property) => {
+      const searchableValues = [
+        property.name,
+        property.address_line,
+        property.city,
+        property.province,
+        property.postal_code,
+      ];
 
       const matchesSearch =
         !query ||
-        [
-          property.name,
-          property.address_line,
-          property.city,
-          property.province,
-          property.postal_code,
-        ].some(
+        searchableValues.some(
           (value) =>
             typeof value === "string" &&
             value.toLowerCase().includes(query),
         );
 
+      const normalizedStatus = (
+        property.status || "active"
+      ).toLowerCase();
+
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === "active" &&
-          ["active", "available"].includes(normalizedStatus)) ||
-        (statusFilter === "inactive" &&
-          ["inactive", "deactivated"].includes(normalizedStatus));
+        normalizedStatus === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
-  }, [properties, searchTerm, statusFilter]);
 
-  const resetFilters = () => {
+    return [...filtered].sort((a, b) => {
+      const nameA = (a.name || "").toLowerCase();
+      const nameB = (b.name || "").toLowerCase();
+      const statusA = (a.status || "active").toLowerCase();
+      const statusB = (b.status || "active").toLowerCase();
+
+      switch (sortBy) {
+        case "name-desc":
+          return nameB.localeCompare(nameA);
+
+        case "status-asc":
+          return (
+            statusA.localeCompare(statusB) ||
+            nameA.localeCompare(nameB)
+          );
+
+        case "status-desc":
+          return (
+            statusB.localeCompare(statusA) ||
+            nameA.localeCompare(nameB)
+          );
+
+        case "name-asc":
+        default:
+          return nameA.localeCompare(nameB);
+      }
+    });
+  }, [properties, searchTerm, statusFilter, sortBy]);
+
+  const clearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
+    setSortBy("name-asc");
   };
 
   return (
@@ -171,7 +197,7 @@ function Properties() {
 
       {!isLoading && !error && properties.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5">
+          <div className="space-y-4 border-b border-slate-200 px-6 py-5">
             <div>
               <h2 className="font-semibold text-slate-950">
                 Property List
@@ -179,18 +205,21 @@ function Properties() {
 
               <p className="mt-1 text-sm text-slate-500">
                 Showing {filteredProperties.length} of{" "}
-                {properties.length} loaded properties
+                {properties.length} loaded{" "}
+                {properties.length === 1
+                  ? "property"
+                  : "properties"}
                 {pagination.count > properties.length
-                  ? ` (${pagination.count} total)`
+                  ? ` (${pagination.count} total on the server)`
                   : ""}
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <label
                   htmlFor="property-search"
-                  className="mb-2 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
                   Search properties
                 </label>
@@ -210,7 +239,7 @@ function Properties() {
               <div>
                 <label
                   htmlFor="property-status-filter"
-                  className="mb-2 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
                   Filter by status
                 </label>
@@ -226,9 +255,51 @@ function Properties() {
                   <option value="all">All statuses</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
+                  <option value="deactivated">Deactivated</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="property-sort"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Sort properties
+                </label>
+
+                <select
+                  id="property-sort"
+                  value={sortBy}
+                  onChange={(event) =>
+                    setSortBy(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="name-asc">
+                    Name: A to Z
+                  </option>
+                  <option value="name-desc">
+                    Name: Z to A
+                  </option>
+                  <option value="status-asc">
+                    Status: A to Z
+                  </option>
+                  <option value="status-desc">
+                    Status: Z to A
+                  </option>
                 </select>
               </div>
             </div>
+
+            {(searchTerm || statusFilter !== "all" || sortBy !== "name-asc") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+              >
+                Reset search, filters, and sorting
+              </Button>
+            )}
           </div>
 
           {filteredProperties.length === 0 ? (
@@ -238,15 +309,15 @@ function Properties() {
               </h3>
 
               <p className="mt-2 text-sm text-slate-500">
-                Try changing your search or status filter.
+                Try a different search term or status.
               </p>
 
               <Button
                 variant="secondary"
                 className="mt-4"
-                onClick={resetFilters}
+                onClick={clearFilters}
               >
-                Clear Filters
+                Reset
               </Button>
             </div>
           ) : (
