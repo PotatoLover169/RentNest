@@ -196,10 +196,7 @@ function Properties() {
           title="Unable to load properties"
           message={error}
           action={
-            <Button
-              variant="secondary"
-              onClick={loadProperties}
-            >
+            <Button variant="secondary" onClick={loadProperties}>
               Try Again
             </Button>
           }
@@ -219,7 +216,6 @@ function Properties() {
                     {summary.total}
                   </p>
                 </div>
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600">
                   <span aria-hidden="true">⌂</span>
                 </div>
@@ -236,7 +232,6 @@ function Properties() {
                     {summary.active}
                   </p>
                 </div>
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl text-emerald-600">
                   <span aria-hidden="true">✓</span>
                 </div>
@@ -253,7 +248,6 @@ function Properties() {
                     {summary.inactive}
                   </p>
                 </div>
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-600">
                   <span aria-hidden="true">—</span>
                 </div>
@@ -263,11 +257,11 @@ function Properties() {
 
           {properties.length === 0 ? (
             <EmptyState
-              title="No properties yet"
-              description="Create your first rental property to start managing your portfolio."
+              title="Your property portfolio is empty"
+              description="You haven't added any rental properties yet. Create your first property to start managing units, tenants, and rental activity."
               action={
                 <Button onClick={() => navigate("/properties/new")}>
-                  Add Property
+                  Add Your First Property
                 </Button>
               }
             />
@@ -278,13 +272,10 @@ function Properties() {
                   <h2 className="font-semibold text-slate-950">
                     Property List
                   </h2>
-
                   <p className="mt-1 text-sm text-slate-500">
                     Showing {filteredProperties.length} of{" "}
                     {properties.length} loaded{" "}
-                    {properties.length === 1
-                      ? "property"
-                      : "properties"}
+                    {properties.length === 1 ? "property" : "properties"}
                     {pagination.count > properties.length
                       ? ` (${pagination.count} total on the server)`
                       : ""}
@@ -299,14 +290,11 @@ function Properties() {
                     >
                       Search properties
                     </label>
-
                     <input
                       id="property-search"
                       type="search"
                       value={searchTerm}
-                      onChange={(event) =>
-                        setSearchTerm(event.target.value)
-                      }
+                      onChange={(event) => setSearchTerm(event.target.value)}
                       placeholder="Name, city, or address..."
                       className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
@@ -319,13 +307,10 @@ function Properties() {
                     >
                       Filter by status
                     </label>
-
                     <select
                       id="property-status-filter"
                       value={statusFilter}
-                      onChange={(event) =>
-                        setStatusFilter(event.target.value)
-                      }
+                      onChange={(event) => setStatusFilter(event.target.value)}
                       className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="all">All statuses</option>
@@ -343,13 +328,10 @@ function Properties() {
                     >
                       Sort properties
                     </label>
-
                     <select
                       id="property-sort"
                       value={sortBy}
-                      onChange={(event) =>
-                        setSortBy(event.target.value)
-                      }
+                      onChange={(event) => setSortBy(event.target.value)}
                       className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="name-asc">Name: A to Z</option>
@@ -365,7 +347,6 @@ function Properties() {
                     <p className="text-sm text-slate-500">
                       Search and filter settings are applied.
                     </p>
-
                     <Button
                       variant="secondary"
                       size="sm"
@@ -379,12 +360,18 @@ function Properties() {
 
               {filteredProperties.length === 0 ? (
                 <div className="px-6 py-12 text-center">
-                  <h3 className="font-semibold text-slate-900">
-                    No matching properties
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-2xl text-blue-600">
+                    <span aria-hidden="true">⌕</span>
+                  </div>
+
+                  <h3 className="mt-4 font-semibold text-slate-900">
+                    No matching properties found
                   </h3>
 
-                  <p className="mt-2 text-sm text-slate-500">
-                    Try a different search term or status.
+                  <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+                    {searchTerm.trim()
+                      ? `No properties match "${searchTerm.trim()}". Try a different keyword or adjust your status filter.`
+                      : "No properties match the selected status. Try choosing a different status."}
                   </p>
 
                   <Button
@@ -392,7 +379,7 @@ function Properties() {
                     className="mt-4"
                     onClick={clearFilters}
                   >
-                    Clear Filters
+                    Clear Search and Filters
                   </Button>
                 </div>
               ) : (
@@ -403,15 +390,12 @@ function Properties() {
                         <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                           Property
                         </th>
-
                         <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                           Address
                         </th>
-
                         <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                           Status
                         </th>
-
                         <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                           Actions
                         </th>
@@ -420,9 +404,7 @@ function Properties() {
 
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {filteredProperties.map((property) => {
-                        const statusVariant = getStatusVariant(
-                          property.status,
-                        );
+                        const statusVariant = getStatusVariant(property.status);
 
                         return (
                           <tr
@@ -434,11 +416,9 @@ function Properties() {
                                 {property.name}
                               </p>
                             </td>
-
                             <td className="px-6 py-4 text-sm text-slate-500">
                               {formatAddress(property)}
                             </td>
-
                             <td className="px-6 py-4">
                               <span
                                 className={[
@@ -453,7 +433,6 @@ function Properties() {
                                 {property.status || "Active"}
                               </span>
                             </td>
-
                             <td className="px-6 py-4 text-right">
                               <Button
                                 variant="ghost"
