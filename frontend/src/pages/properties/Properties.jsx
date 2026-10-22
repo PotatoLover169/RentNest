@@ -14,23 +14,29 @@ import {
 import { getPagination, getResults } from "../../utils/api";
 
 function getStatusVariant(status) {
-  const normalizedStatus = status?.toLowerCase();
+  const normalizedStatus = (status || "active").toLowerCase();
 
-  if (
-    normalizedStatus === "active" ||
-    normalizedStatus === "available"
-  ) {
-    return "success";
+  switch (normalizedStatus) {
+    case "active":
+      return "active";
+    case "available":
+      return "available";
+    case "inactive":
+    case "deactivated":
+      return "inactive";
+    default:
+      return "default";
+  }
+}
+
+function formatStatus(status) {
+  const normalizedStatus = (status || "active").trim().toLowerCase();
+
+  if (!normalizedStatus) {
+    return "Active";
   }
 
-  if (
-    normalizedStatus === "inactive" ||
-    normalizedStatus === "deactivated"
-  ) {
-    return "danger";
-  }
-
-  return "default";
+  return normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
 }
 
 function formatAddress(property) {
@@ -406,6 +412,13 @@ function Properties() {
                       {filteredProperties.map((property) => {
                         const statusVariant = getStatusVariant(property.status);
 
+                        const statusClasses = {
+                          active: "bg-emerald-100 text-emerald-700",
+                          available: "bg-blue-100 text-blue-700",
+                          inactive: "bg-red-100 text-red-700",
+                          default: "bg-slate-100 text-slate-700",
+                        };
+
                         return (
                           <tr
                             key={property.id}
@@ -423,14 +436,10 @@ function Properties() {
                               <span
                                 className={[
                                   "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                                  statusVariant === "success"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : statusVariant === "danger"
-                                      ? "bg-red-100 text-red-700"
-                                      : "bg-slate-100 text-slate-700",
+                                  statusClasses[statusVariant],
                                 ].join(" ")}
                               >
-                                {property.status || "Active"}
+                                {formatStatus(property.status)}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
