@@ -14,9 +14,7 @@ import {
 import { getPagination, getResults } from "../../utils/api";
 
 function getStatusVariant(status) {
-  const normalizedStatus = (status || "active").trim().toLowerCase();
-
-  switch (normalizedStatus) {
+  switch ((status || "active").trim().toLowerCase()) {
     case "active":
       return "active";
     case "available":
@@ -30,11 +28,8 @@ function getStatusVariant(status) {
 }
 
 function formatStatus(status) {
-  const normalizedStatus = (status || "active").trim().toLowerCase();
-
-  return normalizedStatus
-    ? normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)
-    : "Active";
+  const value = (status || "active").trim().toLowerCase();
+  return value ? value[0].toUpperCase() + value.slice(1) : "Active";
 }
 
 function formatAddress(property) {
@@ -63,13 +58,8 @@ function StatusBadge({ status }) {
   const variant = getStatusVariant(status);
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[variant]}`}
-    >
-      <span
-        className="mr-2 h-1.5 w-1.5 rounded-full bg-current"
-        aria-hidden="true"
-      />
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[variant]}`}>
+      <span className="mr-2 h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
       {formatStatus(status)}
     </span>
   );
@@ -87,20 +77,12 @@ function PropertyCard({ property, onView }) {
             Property ID: {formatPropertyId(property.id)}
           </p>
         </div>
-        <div className="shrink-0">
-          <StatusBadge status={property.status} />
-        </div>
+        <StatusBadge status={property.status} />
       </div>
-
       <div className="mt-4 border-t border-slate-100 pt-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Address
-        </p>
-        <p className="mt-1 break-words text-sm leading-6 text-slate-600">
-          {formatAddress(property)}
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Address</p>
+        <p className="mt-1 break-words text-sm leading-6 text-slate-600">{formatAddress(property)}</p>
       </div>
-
       <div className="mt-4 flex justify-end">
         <Button
           variant="secondary"
@@ -117,13 +99,8 @@ function PropertyCard({ property, onView }) {
 
 function Properties() {
   const navigate = useNavigate();
-
   const [properties, setProperties] = useState([]);
-  const [pagination, setPagination] = useState({
-    count: 0,
-    next: null,
-    previous: null,
-  });
+  const [pagination, setPagination] = useState({ count: 0, next: null, previous: null });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("name-asc");
@@ -134,7 +111,6 @@ function Properties() {
     try {
       setIsLoading(true);
       setError("");
-
       const data = await getProperties();
       setProperties(getResults(data));
       setPagination(getPagination(data));
@@ -150,7 +126,7 @@ function Properties() {
   }, []);
 
   useEffect(() => {
-    // Fetch the property list when the page mounts.
+    // Fetch properties when the page mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProperties();
   }, [loadProperties]);
@@ -166,44 +142,33 @@ function Properties() {
       return status === "inactive" || status === "deactivated";
     }).length;
 
-    return {
-      total: pagination.count || properties.length,
-      active,
-      inactive,
-    };
+    return { total: pagination.count || properties.length, active, inactive };
   }, [properties, pagination.count]);
 
   const filteredProperties = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
     const filtered = properties.filter((property) => {
-      const searchableValues = [
+      const values = [
         property.name,
         property.address_line,
         property.city,
         property.province,
         property.postal_code,
-        property.id === null || property.id === undefined
-          ? ""
-          : String(property.id),
+        property.id == null ? "" : String(property.id),
       ];
 
       const matchesSearch =
         !query ||
-        searchableValues.some(
+        values.some(
           (value) =>
-            typeof value === "string" &&
-            value.toLowerCase().includes(query),
+            typeof value === "string" && value.toLowerCase().includes(query),
         );
 
-      const normalizedStatus = (
-        property.status || "active"
-      ).trim().toLowerCase();
+      const status = (property.status || "active").trim().toLowerCase();
+      const matchesStatus = statusFilter === "all" || status === statusFilter;
 
-      return (
-        matchesSearch &&
-        (statusFilter === "all" || normalizedStatus === statusFilter)
-      );
+      return matchesSearch && matchesStatus;
     });
 
     return [...filtered].sort((a, b) => {
@@ -231,14 +196,12 @@ function Properties() {
     setSortBy("name-asc");
   };
 
-  const hasActiveFilters =
-    searchTerm.trim() !== "" ||
-    statusFilter !== "all" ||
-    sortBy !== "name-asc";
+  const hasSearch = searchTerm.trim() !== "";
+  const hasActiveFilters = hasSearch || statusFilter !== "all" || sortBy !== "name-asc";
+  const activeFilterCount =
+    Number(hasSearch) + Number(statusFilter !== "all") + Number(sortBy !== "name-asc");
 
-  const viewProperty = (propertyId) => {
-    navigate(`/properties/${propertyId}`);
-  };
+  const viewProperty = (propertyId) => navigate(`/properties/${propertyId}`);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -246,11 +209,7 @@ function Properties() {
         eyebrow="Management"
         title="Properties"
         description="Manage your rental properties and view their current information."
-        action={
-          <Button onClick={() => navigate("/properties/new")}>
-            Add Property
-          </Button>
-        }
+        action={<Button onClick={() => navigate("/properties/new")}>Add Property</Button>}
       />
 
       {isLoading && <LoadingState message="Loading properties..." />}
@@ -259,11 +218,7 @@ function Properties() {
         <ErrorState
           title="Unable to load properties"
           message={error}
-          action={
-            <Button variant="secondary" onClick={loadProperties}>
-              Try Again
-            </Button>
-          }
+          action={<Button variant="secondary" onClick={loadProperties}>Try Again</Button>}
         />
       )}
 
@@ -271,28 +226,16 @@ function Properties() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Card className="p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Total Properties
-              </p>
-              <p className="mt-2 text-3xl font-bold text-slate-950">
-                {summary.total}
-              </p>
+              <p className="text-sm font-medium text-slate-500">Total Properties</p>
+              <p className="mt-2 text-3xl font-bold text-slate-950">{summary.total}</p>
             </Card>
             <Card className="p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Active Properties
-              </p>
-              <p className="mt-2 text-3xl font-bold text-emerald-600">
-                {summary.active}
-              </p>
+              <p className="text-sm font-medium text-slate-500">Active Properties</p>
+              <p className="mt-2 text-3xl font-bold text-emerald-600">{summary.active}</p>
             </Card>
             <Card className="p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Inactive Properties
-              </p>
-              <p className="mt-2 text-3xl font-bold text-slate-600">
-                {summary.inactive}
-              </p>
+              <p className="text-sm font-medium text-slate-500">Inactive Properties</p>
+              <p className="mt-2 text-3xl font-bold text-slate-600">{summary.inactive}</p>
             </Card>
           </div>
 
@@ -300,49 +243,57 @@ function Properties() {
             <EmptyState
               title="Your property portfolio is empty"
               description="You haven't added any rental properties yet. Create your first property to start managing units, tenants, and rental activity."
-              action={
-                <Button onClick={() => navigate("/properties/new")}>
-                  Add Your First Property
-                </Button>
-              }
+              action={<Button onClick={() => navigate("/properties/new")}>Add Your First Property</Button>}
             />
           ) : (
             <Card className="overflow-hidden">
-              <div className="space-y-4 border-b border-slate-200 px-4 py-5 sm:px-6">
-                <div>
-                  <h2 className="font-semibold text-slate-950">Property List</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Showing {filteredProperties.length} of {properties.length}{" "}
-                    loaded {properties.length === 1 ? "property" : "properties"}
-                    {pagination.count > properties.length
-                      ? ` (${pagination.count} total on the server)`
-                      : ""}
-                  </p>
+              <div className="space-y-5 border-b border-slate-200 px-4 py-5 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold text-slate-950">Property List</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Showing {filteredProperties.length} of {properties.length} loaded properties
+                      {pagination.count > properties.length
+                        ? ` (${pagination.count} total on the server)`
+                        : ""}
+                    </p>
+                  </div>
+                  {hasActiveFilters && (
+                    <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} applied
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
-                    <label
-                      htmlFor="property-search"
-                      className="mb-1.5 block text-sm font-medium text-slate-700"
-                    >
+                    <label htmlFor="property-search" className="mb-1.5 block text-sm font-medium text-slate-700">
                       Search properties
                     </label>
-                    <input
-                      id="property-search"
-                      type="search"
-                      value={searchTerm}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Name, ID, city, or address..."
-                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
+                    <div className="relative">
+                      <input
+                        id="property-search"
+                        type="search"
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        placeholder="Name, ID, city, or address..."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-20 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                      {hasSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchTerm("")}
+                          className="absolute inset-y-0 right-3 my-auto h-fit rounded-md px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          aria-label="Clear property search"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
-                    <label
-                      htmlFor="property-status-filter"
-                      className="mb-1.5 block text-sm font-medium text-slate-700"
-                    >
+                    <label htmlFor="property-status-filter" className="mb-1.5 block text-sm font-medium text-slate-700">
                       Filter by status
                     </label>
                     <select
@@ -360,10 +311,7 @@ function Properties() {
                   </div>
 
                   <div>
-                    <label
-                      htmlFor="property-sort"
-                      className="mb-1.5 block text-sm font-medium text-slate-700"
-                    >
+                    <label htmlFor="property-sort" className="mb-1.5 block text-sm font-medium text-slate-700">
                       Sort properties
                     </label>
                     <select
@@ -381,16 +329,12 @@ function Properties() {
                 </div>
 
                 {hasActiveFilters && (
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-slate-500">
-                      Search and filter settings are applied.
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
+                    <p className="text-sm text-slate-600">
+                      Refine your results or reset all search and filter settings.
                     </p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={clearFilters}
-                    >
-                      Clear Filters
+                    <Button variant="secondary" size="sm" onClick={clearFilters}>
+                      Reset All
                     </Button>
                   </div>
                 )}
@@ -398,19 +342,13 @@ function Properties() {
 
               {filteredProperties.length === 0 ? (
                 <div className="px-6 py-12 text-center">
-                  <h3 className="font-semibold text-slate-900">
-                    No matching properties found
-                  </h3>
+                  <h3 className="font-semibold text-slate-900">No matching properties found</h3>
                   <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-                    {searchTerm.trim()
-                      ? `No properties match "${searchTerm.trim()}". Try a different keyword or adjust your status filter.`
-                      : "No properties match the selected status. Try choosing a different status."}
+                    {hasSearch
+                      ? `No properties match "${searchTerm.trim()}". Try another keyword or change the status filter.`
+                      : "No properties match the selected status. Try another filter."}
                   </p>
-                  <Button
-                    variant="secondary"
-                    className="mt-4"
-                    onClick={clearFilters}
-                  >
+                  <Button variant="secondary" className="mt-4" onClick={clearFilters}>
                     Clear Search and Filters
                   </Button>
                 </div>
@@ -418,11 +356,7 @@ function Properties() {
                 <>
                   <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
                     {filteredProperties.map((property) => (
-                      <PropertyCard
-                        key={property.id}
-                        property={property}
-                        onView={viewProperty}
-                      />
+                      <PropertyCard key={property.id} property={property} onView={viewProperty} />
                     ))}
                   </div>
 
@@ -430,53 +364,24 @@ function Properties() {
                     <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            Property
-                          </th>
-                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            Property ID
-                          </th>
-                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            Address
-                          </th>
-                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            Status
-                          </th>
-                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                            Actions
-                          </th>
+                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Property</th>
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Property ID</th>
+                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Address</th>
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredProperties.map((property) => (
-                          <tr
-                            key={property.id}
-                            className="transition-colors hover:bg-blue-50/40 focus-within:bg-blue-50/40"
-                          >
+                          <tr key={property.id} className="transition-colors hover:bg-blue-50/40 focus-within:bg-blue-50/40">
                             <td className="min-w-48 px-6 py-5">
-                              <p className="font-semibold text-slate-900">
-                                {property.name || "Untitled property"}
-                              </p>
-                              <p className="mt-1 text-xs text-slate-400">
-                                {formatPropertyId(property.id)}
-                              </p>
+                              <p className="font-semibold text-slate-900">{property.name || "Untitled property"}</p>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-5 font-medium tabular-nums text-slate-500">
-                              {formatPropertyId(property.id)}
-                            </td>
-                            <td className="min-w-64 px-6 py-5 leading-6 text-slate-600">
-                              {formatAddress(property)}
-                            </td>
-                            <td className="whitespace-nowrap px-6 py-5">
-                              <StatusBadge status={property.status} />
-                            </td>
+                            <td className="whitespace-nowrap px-6 py-5 font-medium tabular-nums text-slate-500">{formatPropertyId(property.id)}</td>
+                            <td className="min-w-64 px-6 py-5 leading-6 text-slate-600">{formatAddress(property)}</td>
+                            <td className="whitespace-nowrap px-6 py-5"><StatusBadge status={property.status} /></td>
                             <td className="whitespace-nowrap px-6 py-5 text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => viewProperty(property.id)}
-                                aria-label={`View ${property.name || "property"} details`}
-                              >
+                              <Button variant="ghost" size="sm" onClick={() => viewProperty(property.id)} aria-label={`View ${property.name || "property"} details`}>
                                 View Details
                               </Button>
                             </td>
