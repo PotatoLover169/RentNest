@@ -47,6 +47,15 @@ function formatPropertyId(id) {
   return id === null || id === undefined ? "—" : `#${id}`;
 }
 
+function formatRefreshTime(date) {
+  if (!date) return "";
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 const statusClasses = {
   active: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
   available: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
@@ -106,14 +115,17 @@ function Properties() {
   const [sortBy, setSortBy] = useState("name-asc");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
   const loadProperties = useCallback(async () => {
     try {
       setIsLoading(true);
       setError("");
+
       const data = await getProperties();
       setProperties(getResults(data));
       setPagination(getPagination(data));
+      setLastRefreshed(new Date());
     } catch (requestError) {
       setError(
         requestError?.response?.data?.message ||
@@ -212,9 +224,11 @@ function Properties() {
         action={<Button onClick={() => navigate("/properties/new")}>Add Property</Button>}
       />
 
-      {isLoading && <LoadingState message="Loading properties..." />}
+      {isLoading && properties.length === 0 && (
+        <LoadingState message="Loading properties..." />
+      )}
 
-      {!isLoading && error && (
+      {!isLoading && error && properties.length === 0 && (
         <ErrorState
           title="Unable to load properties"
           message={error}
@@ -222,8 +236,14 @@ function Properties() {
         />
       )}
 
-      {!isLoading && !error && (
+      {(!isLoading || properties.length > 0) && (
         <>
+          {error && properties.length > 0 && (
+            <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error} The previously loaded property list is still displayed.
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Card className="p-5">
               <p className="text-sm font-medium text-slate-500">Total Properties</p>
@@ -239,7 +259,7 @@ function Properties() {
             </Card>
           </div>
 
-          {properties.length === 0 ? (
+          {properties.length === 0 && !isLoading ? (
             <EmptyState
               title="Your property portfolio is empty"
               description="You haven't added any rental properties yet. Create your first property to start managing units, tenants, and rental activity."
@@ -248,7 +268,7 @@ function Properties() {
           ) : (
             <Card className="overflow-hidden">
               <div className="space-y-5 border-b border-slate-200 px-4 py-5 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <h2 className="font-semibold text-slate-950">Property List</h2>
                     <p className="mt-1 text-sm text-slate-500">
@@ -257,12 +277,34 @@ function Properties() {
                         ? ` (${pagination.count} total on the server)`
                         : ""}
                     </p>
+                    {lastRefreshed && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Last refreshed at {formatRefreshTime(lastRefreshed)}
+                      </p>
+                    )}
                   </div>
-                  {hasActiveFilters && (
-                    <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                      {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} applied
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={loadProperties}
+                    disabled={isLoading}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <svg
+                        aria-hidden="true"
+                        className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7v5h-5M4 17v-5h5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.6 9A7 7 0 0 1 18 6l2 2M4 16l2 2a7 7 0 0 0 12.4-3" />
+                      </svg>
+                      {isLoading ? "Refreshing..." : "Refresh"}
                     </span>
-                  )}
+                  </Button>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -331,14 +373,19 @@ function Properties() {
                 {hasActiveFilters && (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
                     <p className="text-sm text-slate-600">
-                      Refine your results or reset all search and filter settings.
+                      {activeFilterCount} {activeFilterCount === 1 ? "filter is" : "filters are"} applied.
                     </p>
-                    <Button variant="secondary" size="sm" onClick={clearFilters}>
-                      Reset All
-                    </Button>
+                    <Button variant="secondary" size="sm" onClick={clearFilters}>Reset All</Button>
                   </div>
                 )}
               </div>
+
+              {isLoading && properties.length > 0 && (
+                <div className="flex items-center gap-3 border-b border-blue-100 bg-blue-50/70 px-5 py-3 text-sm text-blue-700" role="status">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" aria-hidden="true" />
+                  Updating property list...
+                </div>
+              )}
 
               {filteredProperties.length === 0 ? (
                 <div className="px-6 py-12 text-center">
@@ -348,9 +395,7 @@ function Properties() {
                       ? `No properties match "${searchTerm.trim()}". Try another keyword or change the status filter.`
                       : "No properties match the selected status. Try another filter."}
                   </p>
-                  <Button variant="secondary" className="mt-4" onClick={clearFilters}>
-                    Clear Search and Filters
-                  </Button>
+                  <Button variant="secondary" className="mt-4" onClick={clearFilters}>Clear Search and Filters</Button>
                 </div>
               ) : (
                 <>
@@ -374,9 +419,7 @@ function Properties() {
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredProperties.map((property) => (
                           <tr key={property.id} className="transition-colors hover:bg-blue-50/40 focus-within:bg-blue-50/40">
-                            <td className="min-w-48 px-6 py-5">
-                              <p className="font-semibold text-slate-900">{property.name || "Untitled property"}</p>
-                            </td>
+                            <td className="min-w-48 px-6 py-5 font-semibold text-slate-900">{property.name || "Untitled property"}</td>
                             <td className="whitespace-nowrap px-6 py-5 font-medium tabular-nums text-slate-500">{formatPropertyId(property.id)}</td>
                             <td className="min-w-64 px-6 py-5 leading-6 text-slate-600">{formatAddress(property)}</td>
                             <td className="whitespace-nowrap px-6 py-5"><StatusBadge status={property.status} /></td>
