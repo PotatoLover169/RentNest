@@ -32,11 +32,9 @@ function getStatusVariant(status) {
 function formatStatus(status) {
   const normalizedStatus = (status || "active").trim().toLowerCase();
 
-  if (!normalizedStatus) {
-    return "Active";
-  }
-
-  return normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
+  return normalizedStatus
+    ? normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)
+    : "Active";
 }
 
 function formatAddress(property) {
@@ -47,7 +45,7 @@ function formatAddress(property) {
     property.postal_code,
   ].filter(Boolean);
 
-  return parts.length > 0 ? parts.join(", ") : "Address not provided";
+  return parts.length ? parts.join(", ") : "Address not provided";
 }
 
 function formatPropertyId(id) {
@@ -55,10 +53,10 @@ function formatPropertyId(id) {
 }
 
 const statusClasses = {
-  active: "bg-emerald-100 text-emerald-700",
-  available: "bg-blue-100 text-blue-700",
-  inactive: "bg-red-100 text-red-700",
-  default: "bg-slate-100 text-slate-700",
+  active: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
+  available: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
+  inactive: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20",
+  default: "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-500/20",
 };
 
 function StatusBadge({ status }) {
@@ -66,11 +64,12 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={[
-        "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
-        statusClasses[variant],
-      ].join(" ")}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[variant]}`}
     >
+      <span
+        className="mr-2 h-1.5 w-1.5 rounded-full bg-current"
+        aria-hidden="true"
+      />
       {formatStatus(status)}
     </span>
   );
@@ -78,7 +77,7 @@ function StatusBadge({ status }) {
 
 function PropertyCard({ property, onView }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words font-semibold text-slate-950">
@@ -88,7 +87,6 @@ function PropertyCard({ property, onView }) {
             Property ID: {formatPropertyId(property.id)}
           </p>
         </div>
-
         <div className="shrink-0">
           <StatusBadge status={property.status} />
         </div>
@@ -138,7 +136,6 @@ function Properties() {
       setError("");
 
       const data = await getProperties();
-
       setProperties(getResults(data));
       setPagination(getPagination(data));
     } catch (requestError) {
@@ -203,11 +200,10 @@ function Properties() {
         property.status || "active"
       ).trim().toLowerCase();
 
-      const matchesStatus =
-        statusFilter === "all" ||
-        normalizedStatus === statusFilter;
-
-      return matchesSearch && matchesStatus;
+      return (
+        matchesSearch &&
+        (statusFilter === "all" || normalizedStatus === statusFilter)
+      );
     });
 
     return [...filtered].sort((a, b) => {
@@ -220,16 +216,9 @@ function Properties() {
         case "name-desc":
           return nameB.localeCompare(nameA);
         case "status-asc":
-          return (
-            statusA.localeCompare(statusB) ||
-            nameA.localeCompare(nameB)
-          );
+          return statusA.localeCompare(statusB) || nameA.localeCompare(nameB);
         case "status-desc":
-          return (
-            statusB.localeCompare(statusA) ||
-            nameA.localeCompare(nameB)
-          );
-        case "name-asc":
+          return statusB.localeCompare(statusA) || nameA.localeCompare(nameB);
         default:
           return nameA.localeCompare(nameB);
       }
@@ -282,51 +271,28 @@ function Properties() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Card className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total Properties
-                  </p>
-                  <p className="mt-2 text-3xl font-bold text-slate-950">
-                    {summary.total}
-                  </p>
-                </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600">
-                  <span aria-hidden="true">⌂</span>
-                </div>
-              </div>
+              <p className="text-sm font-medium text-slate-500">
+                Total Properties
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-950">
+                {summary.total}
+              </p>
             </Card>
-
             <Card className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Active Properties
-                  </p>
-                  <p className="mt-2 text-3xl font-bold text-emerald-600">
-                    {summary.active}
-                  </p>
-                </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl text-emerald-600">
-                  <span aria-hidden="true">✓</span>
-                </div>
-              </div>
+              <p className="text-sm font-medium text-slate-500">
+                Active Properties
+              </p>
+              <p className="mt-2 text-3xl font-bold text-emerald-600">
+                {summary.active}
+              </p>
             </Card>
-
             <Card className="p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Inactive Properties
-                  </p>
-                  <p className="mt-2 text-3xl font-bold text-slate-600">
-                    {summary.inactive}
-                  </p>
-                </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-600">
-                  <span aria-hidden="true">—</span>
-                </div>
-              </div>
+              <p className="text-sm font-medium text-slate-500">
+                Inactive Properties
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-600">
+                {summary.inactive}
+              </p>
             </Card>
           </div>
 
@@ -344,13 +310,10 @@ function Properties() {
             <Card className="overflow-hidden">
               <div className="space-y-4 border-b border-slate-200 px-4 py-5 sm:px-6">
                 <div>
-                  <h2 className="font-semibold text-slate-950">
-                    Property List
-                  </h2>
+                  <h2 className="font-semibold text-slate-950">Property List</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Showing {filteredProperties.length} of{" "}
-                    {properties.length} loaded{" "}
-                    {properties.length === 1 ? "property" : "properties"}
+                    Showing {filteredProperties.length} of {properties.length}{" "}
+                    loaded {properties.length === 1 ? "property" : "properties"}
                     {pagination.count > properties.length
                       ? ` (${pagination.count} total on the server)`
                       : ""}
@@ -386,7 +349,7 @@ function Properties() {
                       id="property-status-filter"
                       value={statusFilter}
                       onChange={(event) => setStatusFilter(event.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="all">All statuses</option>
                       <option value="active">Active</option>
@@ -407,7 +370,7 @@ function Properties() {
                       id="property-sort"
                       value={sortBy}
                       onChange={(event) => setSortBy(event.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="name-asc">Name: A to Z</option>
                       <option value="name-desc">Name: Z to A</option>
@@ -435,10 +398,7 @@ function Properties() {
 
               {filteredProperties.length === 0 ? (
                 <div className="px-6 py-12 text-center">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-2xl text-blue-600">
-                    <span aria-hidden="true">⌕</span>
-                  </div>
-                  <h3 className="mt-4 font-semibold text-slate-900">
+                  <h3 className="font-semibold text-slate-900">
                     No matching properties found
                   </h3>
                   <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
@@ -456,7 +416,6 @@ function Properties() {
                 </div>
               ) : (
                 <>
-                  {/* Mobile property cards */}
                   <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
                     {filteredProperties.map((property) => (
                       <PropertyCard
@@ -467,50 +426,51 @@ function Properties() {
                     ))}
                   </div>
 
-                  {/* Desktop property table */}
                   <div className="hidden overflow-x-auto lg:block">
-                    <table className="min-w-full divide-y divide-slate-200">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Property
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Property ID
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Address
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Status
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="whitespace-nowrap px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                             Actions
                           </th>
                         </tr>
                       </thead>
-
-                      <tbody className="divide-y divide-slate-200 bg-white">
+                      <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredProperties.map((property) => (
                           <tr
                             key={property.id}
-                            className="transition hover:bg-slate-50"
+                            className="transition-colors hover:bg-blue-50/40 focus-within:bg-blue-50/40"
                           >
-                            <td className="min-w-48 px-6 py-4">
-                              <p className="font-medium text-slate-900">
+                            <td className="min-w-48 px-6 py-5">
+                              <p className="font-semibold text-slate-900">
                                 {property.name || "Untitled property"}
                               </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {formatPropertyId(property.id)}
+                              </p>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-500">
+                            <td className="whitespace-nowrap px-6 py-5 font-medium tabular-nums text-slate-500">
                               {formatPropertyId(property.id)}
                             </td>
-                            <td className="min-w-64 px-6 py-4 text-sm text-slate-600">
+                            <td className="min-w-64 px-6 py-5 leading-6 text-slate-600">
                               {formatAddress(property)}
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4">
+                            <td className="whitespace-nowrap px-6 py-5">
                               <StatusBadge status={property.status} />
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right">
+                            <td className="whitespace-nowrap px-6 py-5 text-right">
                               <Button
                                 variant="ghost"
                                 size="sm"
