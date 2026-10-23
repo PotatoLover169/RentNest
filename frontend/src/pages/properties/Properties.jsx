@@ -14,7 +14,7 @@ import {
 import { getPagination, getResults } from "../../utils/api";
 
 function getStatusVariant(status) {
-  const normalizedStatus = (status || "active").toLowerCase();
+  const normalizedStatus = (status || "active").trim().toLowerCase();
 
   switch (normalizedStatus) {
     case "active":
@@ -47,7 +47,74 @@ function formatAddress(property) {
     property.postal_code,
   ].filter(Boolean);
 
-  return parts.length > 0 ? parts.join(", ") : "—";
+  return parts.length > 0 ? parts.join(", ") : "Address not provided";
+}
+
+function formatPropertyId(id) {
+  return id === null || id === undefined ? "—" : `#${id}`;
+}
+
+const statusClasses = {
+  active: "bg-emerald-100 text-emerald-700",
+  available: "bg-blue-100 text-blue-700",
+  inactive: "bg-red-100 text-red-700",
+  default: "bg-slate-100 text-slate-700",
+};
+
+function StatusBadge({ status }) {
+  const variant = getStatusVariant(status);
+
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
+        statusClasses[variant],
+      ].join(" ")}
+    >
+      {formatStatus(status)}
+    </span>
+  );
+}
+
+function PropertyCard({ property, onView }) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="break-words font-semibold text-slate-950">
+            {property.name || "Untitled property"}
+          </h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            Property ID: {formatPropertyId(property.id)}
+          </p>
+        </div>
+
+        <div className="shrink-0">
+          <StatusBadge status={property.status} />
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Address
+        </p>
+        <p className="mt-1 break-words text-sm leading-6 text-slate-600">
+          {formatAddress(property)}
+        </p>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onView(property.id)}
+          aria-label={`View ${property.name || "property"} details`}
+        >
+          View Details
+        </Button>
+      </div>
+    </article>
+  );
 }
 
 function Properties() {
@@ -93,12 +160,12 @@ function Properties() {
 
   const summary = useMemo(() => {
     const active = properties.filter((property) => {
-      const status = (property.status || "active").toLowerCase();
+      const status = (property.status || "active").trim().toLowerCase();
       return status === "active" || status === "available";
     }).length;
 
     const inactive = properties.filter((property) => {
-      const status = (property.status || "active").toLowerCase();
+      const status = (property.status || "active").trim().toLowerCase();
       return status === "inactive" || status === "deactivated";
     }).length;
 
@@ -119,6 +186,9 @@ function Properties() {
         property.city,
         property.province,
         property.postal_code,
+        property.id === null || property.id === undefined
+          ? ""
+          : String(property.id),
       ];
 
       const matchesSearch =
@@ -131,7 +201,7 @@ function Properties() {
 
       const normalizedStatus = (
         property.status || "active"
-      ).toLowerCase();
+      ).trim().toLowerCase();
 
       const matchesStatus =
         statusFilter === "all" ||
@@ -149,19 +219,16 @@ function Properties() {
       switch (sortBy) {
         case "name-desc":
           return nameB.localeCompare(nameA);
-
         case "status-asc":
           return (
             statusA.localeCompare(statusB) ||
             nameA.localeCompare(nameB)
           );
-
         case "status-desc":
           return (
             statusB.localeCompare(statusA) ||
             nameA.localeCompare(nameB)
           );
-
         case "name-asc":
         default:
           return nameA.localeCompare(nameB);
@@ -180,6 +247,10 @@ function Properties() {
     statusFilter !== "all" ||
     sortBy !== "name-asc";
 
+  const viewProperty = (propertyId) => {
+    navigate(`/properties/${propertyId}`);
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
@@ -193,9 +264,7 @@ function Properties() {
         }
       />
 
-      {isLoading && (
-        <LoadingState message="Loading properties..." />
-      )}
+      {isLoading && <LoadingState message="Loading properties..." />}
 
       {!isLoading && error && (
         <ErrorState
@@ -273,7 +342,7 @@ function Properties() {
             />
           ) : (
             <Card className="overflow-hidden">
-              <div className="space-y-4 border-b border-slate-200 px-6 py-5">
+              <div className="space-y-4 border-b border-slate-200 px-4 py-5 sm:px-6">
                 <div>
                   <h2 className="font-semibold text-slate-950">
                     Property List
@@ -288,7 +357,7 @@ function Properties() {
                   </p>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
                     <label
                       htmlFor="property-search"
@@ -301,7 +370,7 @@ function Properties() {
                       type="search"
                       value={searchTerm}
                       onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Name, city, or address..."
+                      placeholder="Name, ID, city, or address..."
                       className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
@@ -369,17 +438,14 @@ function Properties() {
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-2xl text-blue-600">
                     <span aria-hidden="true">⌕</span>
                   </div>
-
                   <h3 className="mt-4 font-semibold text-slate-900">
                     No matching properties found
                   </h3>
-
                   <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
                     {searchTerm.trim()
                       ? `No properties match "${searchTerm.trim()}". Try a different keyword or adjust your status filter.`
                       : "No properties match the selected status. Try choosing a different status."}
                   </p>
-
                   <Button
                     variant="secondary"
                     className="mt-4"
@@ -389,76 +455,77 @@ function Properties() {
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          Property
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          Address
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
+                <>
+                  {/* Mobile property cards */}
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 lg:hidden">
+                    {filteredProperties.map((property) => (
+                      <PropertyCard
+                        key={property.id}
+                        property={property}
+                        onView={viewProperty}
+                      />
+                    ))}
+                  </div>
 
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {filteredProperties.map((property) => {
-                        const statusVariant = getStatusVariant(property.status);
+                  {/* Desktop property table */}
+                  <div className="hidden overflow-x-auto lg:block">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Property
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Property ID
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Address
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
 
-                        const statusClasses = {
-                          active: "bg-emerald-100 text-emerald-700",
-                          available: "bg-blue-100 text-blue-700",
-                          inactive: "bg-red-100 text-red-700",
-                          default: "bg-slate-100 text-slate-700",
-                        };
-
-                        return (
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {filteredProperties.map((property) => (
                           <tr
                             key={property.id}
                             className="transition hover:bg-slate-50"
                           >
-                            <td className="whitespace-nowrap px-6 py-4">
+                            <td className="min-w-48 px-6 py-4">
                               <p className="font-medium text-slate-900">
-                                {property.name}
+                                {property.name || "Untitled property"}
                               </p>
                             </td>
-                            <td className="px-6 py-4 text-sm text-slate-500">
+                            <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-500">
+                              {formatPropertyId(property.id)}
+                            </td>
+                            <td className="min-w-64 px-6 py-4 text-sm text-slate-600">
                               {formatAddress(property)}
                             </td>
-                            <td className="px-6 py-4">
-                              <span
-                                className={[
-                                  "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                                  statusClasses[statusVariant],
-                                ].join(" ")}
-                              >
-                                {formatStatus(property.status)}
-                              </span>
+                            <td className="whitespace-nowrap px-6 py-4">
+                              <StatusBadge status={property.status} />
                             </td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="whitespace-nowrap px-6 py-4 text-right">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() =>
-                                  navigate(`/properties/${property.id}`)
-                                }
+                                onClick={() => viewProperty(property.id)}
+                                aria-label={`View ${property.name || "property"} details`}
                               >
-                                View
+                                View Details
                               </Button>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </Card>
           )}
