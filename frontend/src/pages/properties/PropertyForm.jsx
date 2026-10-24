@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -15,34 +16,13 @@ import {
 } from "../../components/ui";
 
 const PROPERTY_TYPES = [
-  {
-    value: "APARTMENT",
-    label: "Apartment",
-  },
-  {
-    value: "CONDOMINIUM",
-    label: "Condominium",
-  },
-  {
-    value: "HOUSE",
-    label: "House",
-  },
-  {
-    value: "BOARDING_HOUSE",
-    label: "Boarding House",
-  },
-  {
-    value: "DORMITORY",
-    label: "Dormitory",
-  },
-  {
-    value: "COMMERCIAL",
-    label: "Commercial",
-  },
-  {
-    value: "OTHER",
-    label: "Other",
-  },
+  { value: "APARTMENT", label: "Apartment" },
+  { value: "CONDOMINIUM", label: "Condominium" },
+  { value: "HOUSE", label: "House" },
+  { value: "BOARDING_HOUSE", label: "Boarding House" },
+  { value: "DORMITORY", label: "Dormitory" },
+  { value: "COMMERCIAL", label: "Commercial" },
+  { value: "OTHER", label: "Other" },
 ];
 
 const INITIAL_FORM_DATA = {
@@ -64,63 +44,83 @@ function getErrorMessage(error) {
       : data.detail;
   }
 
-  if (data?.message) {
-    return data.message;
-  }
+  if (data?.message) return data.message;
 
-  return "Something went wrong. Please try again.";
+  return "Unable to save the property. Please review the form and try again.";
 }
 
 function getFieldErrors(error) {
   const data = error?.response?.data;
 
-  if (!data || typeof data !== "object") {
-    return {};
-  }
+  if (!data || typeof data !== "object") return {};
 
-  const errors = {};
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([key]) => !["detail", "message"].includes(key))
+      .map(([key, value]) => [
+        key,
+        Array.isArray(value) ? value.join(" ") : String(value),
+      ])
+      .filter(([, value]) => value),
+  );
+}
 
-  Object.entries(data).forEach(([field, value]) => {
-    if (field === "detail" || field === "message") {
-      return;
-    }
+const inputClass =
+  "w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-slate-100";
 
-    if (Array.isArray(value)) {
-      errors[field] = value.join(" ");
-      return;
-    }
-
-    if (typeof value === "string") {
-      errors[field] = value;
-    }
-  });
-
-  return errors;
+function Field({
+  label,
+  name,
+  value,
+  onChange,
+  error,
+  required = false,
+  ...props
+}) {
+  return (
+    <div className="min-w-0">
+      <label
+        htmlFor={name}
+        className="mb-2 block text-sm font-semibold text-slate-700"
+      >
+        {label}
+        {required && <span className="ml-1 text-red-500">*</span>}
+      </label>
+      <input
+        id={name}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required={required}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${name}-error` : undefined}
+        className={`${inputClass} ${error ? "border-red-400" : "border-slate-300"}`}
+        {...props}
+      />
+      {error && (
+        <p id={`${name}-error`} className="mt-2 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function PropertyForm() {
   const navigate = useNavigate();
   const { id } = useParams();
-
   const isEditMode = Boolean(id);
 
-  const [formData, setFormData] = useState(
-    INITIAL_FORM_DATA,
-  );
-
-  const [isLoading, setIsLoading] = useState(
-    isEditMode,
-  );
-
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+  const [isLoading, setIsLoading] = useState(isEditMode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [hasChanges, setHasChanges] = useState(false);
 
   const loadProperty = useCallback(async () => {
-    if (!id) {
-      return;
-    }
+    if (!id) return;
 
     try {
       setIsLoading(true);
@@ -137,17 +137,16 @@ function PropertyForm() {
         postal_code: property.postal_code ?? "",
         description: property.description ?? "",
       });
-    } catch (requestError) {
-      setLoadError(
-        getErrorMessage(requestError),
-      );
+      setHasChanges(false);
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    // Data fetching is intentionally triggered when edit mode loads.
+    // Load existing values only when editing a property.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProperty();
   }, [loadProperty]);
@@ -155,24 +154,14 @@ function PropertyForm() {
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setFormData((current) => ({
-      ...current,
-      [name]: value,
-    }));
-
+    setFormData((current) => ({ ...current, [name]: value }));
+    setHasChanges(true);
     setSubmitError("");
 
     setFieldErrors((current) => {
-      if (!current[name]) {
-        return current;
-      }
-
-      const next = {
-        ...current,
-      };
-
+      if (!current[name]) return current;
+      const next = { ...current };
       delete next[name];
-
       return next;
     });
   };
@@ -181,26 +170,29 @@ function PropertyForm() {
     const errors = {};
 
     if (!formData.name.trim()) {
-      errors.name = "Property name is required.";
+      errors.name = "Enter a property name.";
+    } else if (formData.name.trim().length > 150) {
+      errors.name = "Property name must be 150 characters or fewer.";
     }
 
     if (!formData.property_type) {
-      errors.property_type =
-        "Property type is required.";
+      errors.property_type = "Select a property type.";
     }
 
     if (!formData.address_line.trim()) {
-      errors.address_line =
-        "Address is required.";
+      errors.address_line = "Enter the street address.";
     }
 
     if (!formData.city.trim()) {
-      errors.city = "City is required.";
+      errors.city = "Enter the city.";
     }
 
     if (!formData.province.trim()) {
-      errors.province =
-        "Province is required.";
+      errors.province = "Enter the province.";
+    }
+
+    if (formData.postal_code.trim().length > 20) {
+      errors.postal_code = "Postal code must be 20 characters or fewer.";
     }
 
     return errors;
@@ -208,18 +200,16 @@ function PropertyForm() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
 
     setSubmitError("");
-    setFieldErrors({});
+    const errors = validateForm();
+    setFieldErrors(errors);
 
-    const validationErrors = validateForm();
-
-    if (Object.keys(validationErrors).length > 0) {
-      setFieldErrors(validationErrors);
+    if (Object.keys(errors).length) {
+      document.getElementById(Object.keys(errors)[0])?.focus();
       return;
     }
-
-    setIsSubmitting(true);
 
     const payload = {
       name: formData.name.trim(),
@@ -232,46 +222,42 @@ function PropertyForm() {
     };
 
     try {
+      setIsSubmitting(true);
+
       if (isEditMode) {
         await updateProperty(id, payload);
         navigate(`/properties/${id}`);
-        return;
+      } else {
+        const property = await createProperty(payload);
+        navigate(`/properties/${property.id}`);
       }
-
-      const property = await createProperty(payload);
-
-      navigate(`/properties/${property.id}`);
-    } catch (requestError) {
-      setSubmitError(
-        getErrorMessage(requestError),
-      );
-
-      setFieldErrors(
-        getFieldErrors(requestError),
-      );
+    } catch (error) {
+      setSubmitError(getErrorMessage(error));
+      setFieldErrors(getFieldErrors(error));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleCancel = () => {
-    if (isEditMode) {
-      navigate(`/properties/${id}`);
+    if (
+      hasChanges &&
+      !window.confirm("Discard your unsaved changes?")
+    ) {
       return;
     }
 
-    navigate("/properties");
+    navigate(isEditMode ? `/properties/${id}` : "/properties");
   };
 
   if (isLoading) {
     return (
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
-          eyebrow="Management"
+          eyebrow="Property Management"
           title="Edit Property"
           description="Loading property information..."
         />
-
         <LoadingState message="Loading property..." />
       </div>
     );
@@ -281,170 +267,136 @@ function PropertyForm() {
     return (
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
-          eyebrow="Management"
+          eyebrow="Property Management"
           title="Edit Property"
           description="Unable to load this property."
         />
-
         <ErrorState
           title="Unable to load property"
           message={loadError}
           action={
-            <Button
-              variant="secondary"
-              onClick={loadProperty}
-            >
-              Try Again
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" onClick={loadProperty}>
+                Try Again
+              </Button>
+              <Button variant="ghost" onClick={() => navigate("/properties")}>
+                Back to Properties
+              </Button>
+            </div>
           }
         />
       </div>
     );
   }
 
+  const fieldsComplete = [
+    formData.name.trim(),
+    formData.property_type,
+    formData.address_line.trim(),
+    formData.city.trim(),
+    formData.province.trim(),
+  ].filter(Boolean).length;
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <PageHeader
-        eyebrow="Management"
-        title={
-          isEditMode
-            ? "Edit Property"
-            : "Add Property"
-        }
+        eyebrow="Property Management"
+        title={isEditMode ? "Edit Property" : "Add Property"}
         description={
           isEditMode
-            ? "Update the property information below."
-            : "Add a new rental property to your portfolio."
+            ? "Keep your property information accurate and up to date."
+            : "Register a rental property in your RentNest portfolio."
+        }
+        action={
+          <Button variant="secondary" onClick={handleCancel}>
+            Cancel
+          </Button>
         }
       />
 
-      <Card className="p-6 sm:p-8">
-        {submitError && (
-          <div
-            role="alert"
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-          >
-            {submitError}
+      <Card className="overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-5 sm:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-slate-950">
+                Property information
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Fields marked with <span className="text-red-500">*</span> are required.
+              </p>
+            </div>
+            <span className="whitespace-nowrap rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+              {fieldsComplete}/5 required
+            </span>
           </div>
-        )}
+          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-blue-600 transition-all"
+              style={{ width: `${(fieldsComplete / 5) * 100}%` }}
+            />
+          </div>
+        </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-8"
-        >
+        <form onSubmit={handleSubmit} noValidate className="space-y-8 p-6 sm:p-8">
+          {submitError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700"
+            >
+              {submitError}
+            </div>
+          )}
+
           <section>
-            <h2 className="text-lg font-semibold text-slate-950">
-              Property Information
-            </h2>
-
+            <h3 className="text-base font-semibold text-slate-950">
+              Basic details
+            </h3>
             <p className="mt-1 text-sm text-slate-500">
-              Enter the basic information for this property.
+              Identify the property and choose its category.
             </p>
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="name"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Property name
-                </label>
-
-                <input
-                  id="name"
+                <Field
+                  label="Property name"
                   name="name"
-                  type="text"
                   value={formData.name}
                   onChange={handleChange}
-                  placeholder="e.g. Sunrise Apartments"
-                  maxLength={150}
+                  error={fieldErrors.name}
                   required
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.name
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
+                  maxLength={150}
+                  placeholder="e.g. Sunrise Apartments"
+                  autoComplete="organization"
                 />
-
-                {fieldErrors.name && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.name}
-                  </p>
-                )}
+                <p className="mt-1 text-right text-xs text-slate-400">
+                  {formData.name.length}/150
+                </p>
               </div>
 
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="property_type"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Property type
+                <label htmlFor="property_type" className="mb-2 block text-sm font-semibold text-slate-700">
+                  Property type <span className="text-red-500">*</span>
                 </label>
-
                 <select
                   id="property_type"
                   name="property_type"
                   value={formData.property_type}
                   onChange={handleChange}
                   required
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.property_type
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
+                  aria-invalid={Boolean(fieldErrors.property_type)}
+                  aria-describedby={fieldErrors.property_type ? "property_type-error" : undefined}
+                  className={`${inputClass} ${fieldErrors.property_type ? "border-red-400" : "border-slate-300"}`}
                 >
-                  <option value="">
-                    Select a property type
-                  </option>
-
+                  <option value="">Select a property type</option>
                   {PROPERTY_TYPES.map((type) => (
-                    <option
-                      key={type.value}
-                      value={type.value}
-                    >
+                    <option key={type.value} value={type.value}>
                       {type.label}
                     </option>
                   ))}
                 </select>
-
                 {fieldErrors.property_type && (
-                  <p className="mt-1.5 text-sm text-red-600">
+                  <p id="property_type-error" className="mt-2 text-sm text-red-600">
                     {fieldErrors.property_type}
-                  </p>
-                )}
-              </div>
-
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="description"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Description
-                </label>
-
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows={4}
-                  placeholder="Describe the property..."
-                  className={[
-                    "w-full resize-y rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.description
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
-                />
-
-                {fieldErrors.description && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.description}
                   </p>
                 )}
               </div>
@@ -452,145 +404,91 @@ function PropertyForm() {
           </section>
 
           <section className="border-t border-slate-200 pt-8">
-            <h2 className="text-lg font-semibold text-slate-950">
-              Property Address
-            </h2>
-
+            <h3 className="text-base font-semibold text-slate-950">
+              Location
+            </h3>
             <p className="mt-1 text-sm text-slate-500">
-              Enter the property's complete location.
+              Enter the property's registered address.
             </p>
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="address_line"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Address
-                </label>
-
-                <input
-                  id="address_line"
+                <Field
+                  label="Street address"
                   name="address_line"
-                  type="text"
                   value={formData.address_line}
                   onChange={handleChange}
-                  placeholder="e.g. 123 Main Street"
+                  error={fieldErrors.address_line}
+                  required
                   maxLength={255}
-                  required
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.address_line
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
+                  placeholder="Building, street, barangay"
+                  autoComplete="street-address"
                 />
-
-                {fieldErrors.address_line && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.address_line}
-                  </p>
-                )}
               </div>
+              <Field
+                label="City"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                error={fieldErrors.city}
+                required
+                maxLength={100}
+                placeholder="e.g. Cebu City"
+                autoComplete="address-level2"
+              />
+              <Field
+                label="Province"
+                name="province"
+                value={formData.province}
+                onChange={handleChange}
+                error={fieldErrors.province}
+                required
+                maxLength={100}
+                placeholder="e.g. Cebu"
+                autoComplete="address-level1"
+              />
+              <Field
+                label="Postal code"
+                name="postal_code"
+                value={formData.postal_code}
+                onChange={handleChange}
+                error={fieldErrors.postal_code}
+                maxLength={20}
+                placeholder="Optional"
+                autoComplete="postal-code"
+              />
+            </div>
+          </section>
 
-              <div>
-                <label
-                  htmlFor="city"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  City
-                </label>
-
-                <input
-                  id="city"
-                  name="city"
-                  type="text"
-                  value={formData.city}
-                  onChange={handleChange}
-                  placeholder="e.g. Cebu City"
-                  maxLength={100}
-                  required
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.city
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
-                />
-
-                {fieldErrors.city && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.city}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="province"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Province
-                </label>
-
-                <input
-                  id="province"
-                  name="province"
-                  type="text"
-                  value={formData.province}
-                  onChange={handleChange}
-                  placeholder="e.g. Cebu"
-                  maxLength={100}
-                  required
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.province
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
-                />
-
-                {fieldErrors.province && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.province}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="postal_code"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Postal code
-                </label>
-
-                <input
-                  id="postal_code"
-                  name="postal_code"
-                  type="text"
-                  value={formData.postal_code}
-                  onChange={handleChange}
-                  placeholder="e.g. 6000"
-                  maxLength={20}
-                  className={[
-                    "w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
-                    "placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10",
-                    fieldErrors.postal_code
-                      ? "border-red-400"
-                      : "border-slate-300",
-                  ].join(" ")}
-                />
-
-                {fieldErrors.postal_code && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {fieldErrors.postal_code}
-                  </p>
-                )}
-              </div>
+          <section className="border-t border-slate-200 pt-8">
+            <h3 className="text-base font-semibold text-slate-950">
+              Additional information
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Add useful context for your team.
+            </p>
+            <div className="mt-5">
+              <label htmlFor="description" className="mb-2 block text-sm font-semibold text-slate-700">
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={5}
+                value={formData.description}
+                onChange={handleChange}
+                maxLength={2000}
+                placeholder="Describe the property, amenities, or other useful details..."
+                className={`${inputClass} resize-y border-slate-300`}
+              />
+              <p className="mt-1 text-right text-xs text-slate-400">
+                {formData.description.length}/2000
+              </p>
+              {fieldErrors.description && (
+                <p className="mt-2 text-sm text-red-600">
+                  {fieldErrors.description}
+                </p>
+              )}
             </div>
           </section>
 
@@ -603,15 +501,9 @@ function PropertyForm() {
             >
               Cancel
             </Button>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-            >
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting
-                ? isEditMode
-                  ? "Saving..."
-                  : "Creating..."
+                ? "Saving property..."
                 : isEditMode
                   ? "Save Changes"
                   : "Create Property"}
