@@ -1,52 +1,32 @@
+
 import apiClient from "./client";
+import { fetchAllPages } from "../utils/paginatedRequest";
 
 export async function getUnits() {
-  const response = await apiClient.get(
-    "/properties/units/",
-  );
-
-  return response.data;
+  return fetchAllPages("/properties/units/");
 }
 
 export async function getUnit(id) {
-  const response = await apiClient.get(
-    `/properties/units/${id}/`,
-  );
-
+  const response = await apiClient.get(`/properties/units/${id}/`);
   return response.data;
 }
 
 export async function createUnit(data) {
-  const response = await apiClient.post(
-    "/properties/units/",
-    data,
-  );
-
+  const response = await apiClient.post("/properties/units/", data);
   return response.data;
 }
 
 export async function updateUnit(id, data) {
-  const response = await apiClient.patch(
-    `/properties/units/${id}/`,
-    data,
-  );
-
+  const response = await apiClient.patch(`/properties/units/${id}/`, data);
   return response.data;
 }
 
 export async function updateUnitStatus(id, data) {
-  const response = await apiClient.post(
-    `/properties/units/${id}/status/`,
-    data,
-  );
-
+  const response = await apiClient.post(`/properties/units/${id}/status/`, data);
   return response.data;
 }
 
 export async function deactivateUnit(id) {
-  const response = await apiClient.post(
-    `/properties/units/${id}/deactivate/`,
-  );
-
+  const response = await apiClient.post(`/properties/units/${id}/deactivate/`);
   return response.data;
 }
