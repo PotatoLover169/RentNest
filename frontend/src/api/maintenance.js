@@ -1,8 +1,9 @@
+
 import apiClient from "./client";
+import { fetchAllPages } from "../utils/paginatedRequest";
 
 export async function getMaintenanceRequests() {
-  const response = await apiClient.get("/maintenance/");
-  return response.data;
+  return fetchAllPages("/maintenance/");
 }
 
 export async function getMaintenanceRequest(id) {
@@ -34,8 +35,6 @@ export async function completeMaintenanceRequest(id, data) {
 }
 
 export async function cancelMaintenanceRequest(id) {
-  const response = await apiClient.post(
-    `/maintenance/${id}/cancel/`,
-  );
+  const response = await apiClient.post(`/maintenance/${id}/cancel/`);
   return response.data;
 }
