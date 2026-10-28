@@ -1,5 +1,7 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+
 import { getPayments } from "../../api/payments";
 
 const STATUS_OPTIONS = [
@@ -87,16 +89,42 @@ function getPaymentDate(payment) {
   return payment.payment_date || payment.due_date || payment.created_at;
 }
 
+function getErrorMessage(error) {
+  const detail =
+    error?.response?.data?.detail ||
+    error?.response?.data?.message;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (!error?.response) {
+    return "Unable to connect to RentNest. Check your connection and try again.";
+  }
+
+  if (error.response.status === 401) {
+    return "Your session may have expired. Please sign in again.";
+  }
+
+  return "Unable to load payments. Please try again.";
+}
+
 function SummaryCard({ label, value, description, accent }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {label}
+          </p>
+
           <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">
             {value}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{description}</p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            {description}
+          </p>
         </div>
 
         <span
@@ -111,44 +139,43 @@ function SummaryCard({ label, value, description, accent }) {
 function Payments() {
   const [payments, setPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [pagination, setPagination] = useState({
-    count: 0,
-    next: null,
-    previous: null,
-  });
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const loadPayments = useCallback(async () => {
-    try {
+  const loadPayments = useCallback(async ({ initial = false } = {}) => {
+    if (initial) {
       setIsLoading(true);
-      setError("");
+    } else {
+      setIsRefreshing(true);
+    }
 
+    setError("");
+
+    try {
       const data = await getPayments();
-      const results = Array.isArray(data) ? data : data?.results ?? [];
+
+      const results = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.results)
+          ? data.results
+          : [];
 
       setPayments(results);
-      setPagination({
-        count: data?.count ?? results.length,
-        next: data?.next ?? null,
-        previous: data?.previous ?? null,
-      });
+      setLastUpdated(new Date());
     } catch (requestError) {
-      setError(
-        requestError?.response?.data?.message ||
-          requestError?.response?.data?.detail ||
-          "Unable to load payments. Please try again.",
-      );
+      setError(getErrorMessage(requestError));
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    // Load payment records when the page mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadPayments();
+    loadPayments({ initial: true });
   }, [loadPayments]);
 
   const summary = useMemo(() => {
@@ -166,6 +193,10 @@ function Payments() {
           totals.pending += 1;
         } else if (status === "FAILED") {
           totals.failed += 1;
+        } else if (status === "REFUNDED") {
+          totals.refunded += 1;
+        } else if (status === "CANCELLED") {
+          totals.cancelled += 1;
         }
 
         return totals;
@@ -175,6 +206,8 @@ function Payments() {
         paid: 0,
         pending: 0,
         failed: 0,
+        refunded: 0,
+        cancelled: 0,
         paidAmount: 0,
       },
     );
@@ -193,17 +226,26 @@ function Payments() {
         payment.id,
         payment.payment_method,
         payment.reference_number,
+        payment.tenant_name,
+        payment.tenant?.email,
+        payment.tenant?.first_name,
+        payment.tenant?.last_name,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
-      const matchesSearch =
-        !normalizedSearch || searchableText.includes(normalizedSearch);
-
-      return matchesStatus && matchesSearch;
+      return (
+        matchesStatus &&
+        (!normalizedSearch || searchableText.includes(normalizedSearch))
+      );
     });
   }, [payments, search, statusFilter]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("ALL");
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-10">
@@ -218,51 +260,119 @@ function Payments() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Monitor rental payment records, review payment statuses, and keep
-            track of collected payments.
+            Monitor rental payment records, review payment statuses, and
+            track collected payments.
           </p>
+
+          {lastUpdated && (
+            <p className="mt-2 text-xs text-slate-400">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
         </div>
 
         <button
           type="button"
-          onClick={loadPayments}
-          disabled={isLoading}
-          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => loadPayments()}
+          disabled={isLoading || isRefreshing}
+          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? "Refreshing..." : "Refresh"}
+          {isLoading || isRefreshing ? "Refreshing…" : "Refresh payments"}
         </button>
       </section>
 
-      {!isLoading && !error && (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            label="Total Payments"
-            value={pagination.count.toLocaleString("en-PH")}
-            description="Records available in the API"
-            accent="bg-blue-500"
-          />
+      {error && (
+        <section
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-5"
+        >
+          <h2 className="font-semibold text-red-900">
+            Unable to load payments
+          </h2>
 
-          <SummaryCard
-            label="Paid"
-            value={summary.paid.toLocaleString("en-PH")}
-            description={formatCurrency(summary.paidAmount) + " on this page"}
-            accent="bg-emerald-500"
-          />
+          <p className="mt-2 text-sm leading-6 text-red-700">
+            {error}
+          </p>
 
-          <SummaryCard
-            label="Pending"
-            value={summary.pending.toLocaleString("en-PH")}
-            description="Awaiting payment"
-            accent="bg-amber-500"
-          />
-
-          <SummaryCard
-            label="Failed"
-            value={summary.failed.toLocaleString("en-PH")}
-            description="Payment attempts marked failed"
-            accent="bg-red-500"
-          />
+          <button
+            type="button"
+            onClick={() => loadPayments()}
+            disabled={isRefreshing}
+            className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-60"
+          >
+            {isRefreshing ? "Retrying…" : "Try again"}
+          </button>
         </section>
+      )}
+
+      {isLoading && (
+        <section
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          aria-label="Loading payment summary"
+          aria-busy="true"
+        >
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="h-28 animate-pulse rounded-2xl bg-slate-100"
+            />
+          ))}
+        </section>
+      )}
+
+      {!isLoading && !error && (
+        <>
+          <section
+            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            aria-label="Payment summary"
+          >
+            <SummaryCard
+              label="Total Payments"
+              value={summary.total.toLocaleString("en-PH")}
+              description="All loaded payment records"
+              accent="bg-blue-500"
+            />
+
+            <SummaryCard
+              label="Paid"
+              value={summary.paid.toLocaleString("en-PH")}
+              description={`${formatCurrency(summary.paidAmount)} collected`}
+              accent="bg-emerald-500"
+            />
+
+            <SummaryCard
+              label="Pending"
+              value={summary.pending.toLocaleString("en-PH")}
+              description="Awaiting payment"
+              accent="bg-amber-500"
+            />
+
+            <SummaryCard
+              label="Failed"
+              value={summary.failed.toLocaleString("en-PH")}
+              description="Marked as failed"
+              accent="bg-red-500"
+            />
+          </section>
+
+          {(summary.refunded > 0 || summary.cancelled > 0) && (
+            <section className="grid gap-4 sm:grid-cols-2">
+              <SummaryCard
+                label="Refunded"
+                value={summary.refunded.toLocaleString("en-PH")}
+                description="Payments marked as refunded"
+                accent="bg-blue-500"
+              />
+
+              <SummaryCard
+                label="Cancelled"
+                value={summary.cancelled.toLocaleString("en-PH")}
+                description="Payments marked as cancelled"
+                accent="bg-slate-400"
+              />
+            </section>
+          )}
+        </>
       )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -271,13 +381,14 @@ function Payments() {
             <h2 className="text-lg font-semibold text-slate-950">
               Payment Records
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
-              Search and filter the available payment records.
+              Search records and filter by payment status.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row">
-            <div className="relative min-w-0 flex-1">
+            <div className="min-w-0 flex-1">
               <label htmlFor="payment-search" className="sr-only">
                 Search payments
               </label>
@@ -287,7 +398,7 @@ function Payments() {
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search reference, ID, or method..."
+                placeholder="Search reference, ID, tenant, or method…"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
@@ -310,6 +421,16 @@ function Payments() {
                 ))}
               </select>
             </div>
+
+            {(search || statusFilter !== "ALL") && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
 
@@ -320,28 +441,10 @@ function Payments() {
               role="status"
               aria-label="Loading payments"
             />
+
             <p className="mt-4 text-sm text-slate-500">
-              Loading payment records...
+              Loading payment records…
             </p>
-          </div>
-        )}
-
-        {!isLoading && error && (
-          <div className="p-6 sm:p-8">
-            <div className="rounded-xl border border-red-200 bg-red-50 p-5">
-              <h3 className="font-semibold text-red-900">
-                Unable to load payments
-              </h3>
-              <p className="mt-2 text-sm text-red-700">{error}</p>
-
-              <button
-                type="button"
-                onClick={loadPayments}
-                className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-800"
-              >
-                Try again
-              </button>
-            </div>
           </div>
         )}
 
@@ -370,16 +473,13 @@ function Payments() {
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
               {payments.length === 0
                 ? "Payment records associated with your account will appear here."
-                : "Try adjusting your search term or selecting a different payment status."}
+                : "Try another search term or select a different payment status."}
             </p>
 
             {(search || statusFilter !== "ALL") && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("ALL");
-                }}
+                onClick={clearFilters}
                 className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700"
               >
                 Clear filters
@@ -421,10 +521,11 @@ function Payments() {
                       <td className="whitespace-nowrap px-5 py-4 sm:px-6">
                         <Link
                           to={`/payments/${payment.id}`}
-                          className="text-sm font-semibold text-blue-600 transition hover:text-blue-800 hover:underline"
+                          className="text-sm font-semibold text-blue-600 transition hover:text-blue-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                           {getPaymentReference(payment)}
                         </Link>
+
                         <p className="mt-1 text-xs text-slate-500">
                           ID: {payment.id}
                         </p>
@@ -458,14 +559,20 @@ function Payments() {
             </div>
 
             <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <p>
-                Showing {filteredPayments.length} matching record
-                {filteredPayments.length === 1 ? "" : "s"} from the loaded page
+              <p role="status" aria-live="polite">
+                Showing {filteredPayments.length.toLocaleString("en-PH")} of{" "}
+                {payments.length.toLocaleString("en-PH")} loaded payments
               </p>
 
-              <p className="text-xs text-slate-400">
-                {pagination.count.toLocaleString("en-PH")} total records
-              </p>
+              {(search || statusFilter !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="w-fit text-sm font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  Reset filters
+                </button>
+              )}
             </div>
           </>
         )}
