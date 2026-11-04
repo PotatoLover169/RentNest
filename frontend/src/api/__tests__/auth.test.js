@@ -1,4 +1,14 @@
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../client", () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+  },
+}));
+
 import apiClient from "../client";
 import {
   loginUser,
@@ -8,14 +18,6 @@ import {
   logoutUser,
   refreshAccessToken,
 } from "../auth";
-
-vi.mock("../client", () => ({
-  default: {
-    get: vi.fn(),
-    post: vi.fn(),
-    patch: vi.fn(),
-  },
-}));
 
 describe("Authentication API services", () => {
   beforeEach(() => {
@@ -35,11 +37,7 @@ describe("Authentication API services", () => {
     apiClient.post.mockResolvedValue({ data: result });
 
     await expect(loginUser(credentials)).resolves.toEqual(result);
-
-    expect(apiClient.post).toHaveBeenCalledWith(
-      "/auth/login/",
-      credentials,
-    );
+    expect(apiClient.post).toHaveBeenCalledWith("/auth/login/", credentials);
   });
 
   it("registers a user", async () => {
@@ -58,11 +56,7 @@ describe("Authentication API services", () => {
     apiClient.post.mockResolvedValue({ data: result });
 
     await expect(registerUser(payload)).resolves.toEqual(result);
-
-    expect(apiClient.post).toHaveBeenCalledWith(
-      "/auth/register/",
-      payload,
-    );
+    expect(apiClient.post).toHaveBeenCalledWith("/auth/register/", payload);
   });
 
   it("gets the current authenticated user", async () => {
@@ -75,7 +69,6 @@ describe("Authentication API services", () => {
     apiClient.get.mockResolvedValue({ data: user });
 
     await expect(getCurrentUser()).resolves.toEqual(user);
-
     expect(apiClient.get).toHaveBeenCalledWith("/auth/me/");
   });
 
@@ -93,11 +86,7 @@ describe("Authentication API services", () => {
     apiClient.patch.mockResolvedValue({ data: result });
 
     await expect(updateCurrentUser(profile)).resolves.toEqual(result);
-
-    expect(apiClient.patch).toHaveBeenCalledWith(
-      "/auth/me/",
-      profile,
-    );
+    expect(apiClient.patch).toHaveBeenCalledWith("/auth/me/", profile);
   });
 
   it("logs out using the supplied refresh token", async () => {
@@ -107,7 +96,6 @@ describe("Authentication API services", () => {
     apiClient.post.mockResolvedValue({ data: result });
 
     await expect(logoutUser(refreshToken)).resolves.toEqual(result);
-
     expect(apiClient.post).toHaveBeenCalledWith("/auth/logout/", {
       refresh: refreshToken,
     });
@@ -115,31 +103,58 @@ describe("Authentication API services", () => {
 
   it("refreshes the access token", async () => {
     const refreshToken = "refresh-token";
-    const result = {
-      access: "new-access-token",
-    };
+    const result = { access: "new-access-token" };
 
     apiClient.post.mockResolvedValue({ data: result });
 
-    await expect(refreshAccessToken(refreshToken)).resolves.toEqual(
-      result,
-    );
-
+    await expect(refreshAccessToken(refreshToken)).resolves.toEqual(result);
     expect(apiClient.post).toHaveBeenCalledWith("/auth/refresh/", {
       refresh: refreshToken,
     });
   });
 
-  it("propagates authentication API errors", async () => {
-    apiClient.post.mockRejectedValue(
-      new Error("Invalid credentials"),
-    );
+  it.each([
+    ["loginUser", () => loginUser({ email: "tenant@example.com", password: "wrong" })],
+    ["registerUser", () => registerUser({ email: "tenant@example.com" })],
+    ["getCurrentUser", () => getCurrentUser()],
+    ["updateCurrentUser", () => updateCurrentUser({ first_name: "Updated" })],
+    ["logoutUser", () => logoutUser("refresh-token")],
+    ["refreshAccessToken", () => refreshAccessToken("refresh-token")],
+  ])("propagates API errors from %s", async (_name, request) => {
+    const error = new Error("Authentication request failed");
 
-    await expect(
-      loginUser({
-        email: "tenant@example.com",
-        password: "wrong-password",
-      }),
-    ).rejects.toThrow("Invalid credentials");
+    apiClient.get.mockRejectedValue(error);
+    apiClient.post.mockRejectedValue(error);
+    apiClient.patch.mockRejectedValue(error);
+
+    await expect(request()).rejects.toBe(error);
+  });
+
+  it("sends the refresh token only in the logout request body", async () => {
+    apiClient.post.mockResolvedValue({
+      data: { message: "Successfully logged out." },
+    });
+
+    await logoutUser("sample-refresh-token");
+
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(apiClient.post.mock.calls[0]).toEqual([
+      "/auth/logout/",
+      { refresh: "sample-refresh-token" },
+    ]);
+  });
+
+  it("sends the refresh token only in the refresh request body", async () => {
+    apiClient.post.mockResolvedValue({
+      data: { access: "new-access-token" },
+    });
+
+    await refreshAccessToken("sample-refresh-token");
+
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(apiClient.post.mock.calls[0]).toEqual([
+      "/auth/refresh/",
+      { refresh: "sample-refresh-token" },
+    ]);
   });
 });
