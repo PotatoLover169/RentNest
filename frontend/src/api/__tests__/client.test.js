@@ -1,3 +1,4 @@
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import axios from "axios";
 
@@ -88,10 +89,7 @@ describe("API client configuration", () => {
 
     const { interceptor } = await loadClient("");
 
-    const requestConfig = {
-      headers: {},
-    };
-
+    const requestConfig = { headers: {} };
     const result = interceptor(requestConfig);
 
     expect(result.headers.Authorization).toBe(
@@ -102,13 +100,72 @@ describe("API client configuration", () => {
   it("does not add authorization when no access token exists", async () => {
     const { interceptor } = await loadClient("");
 
+    const requestConfig = { headers: {} };
+    const result = interceptor(requestConfig);
+
+    expect(result.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("preserves an existing authorization header when no token is stored", async () => {
+    const { interceptor } = await loadClient("");
+
     const requestConfig = {
-      headers: {},
+      headers: {
+        Authorization: "Basic existing-credentials",
+      },
     };
 
     const result = interceptor(requestConfig);
 
-    expect(result.headers).not.toHaveProperty("Authorization");
+    expect(result.headers.Authorization).toBe(
+      "Basic existing-credentials",
+    );
+  });
+
+  it("replaces an existing authorization header with the stored bearer token", async () => {
+    localStorage.setItem(
+      "rentnest_access_token",
+      "new-access-token",
+    );
+
+    const { interceptor } = await loadClient("");
+
+    const requestConfig = {
+      headers: {
+        Authorization: "Basic old-credentials",
+      },
+    };
+
+    const result = interceptor(requestConfig);
+
+    expect(result.headers.Authorization).toBe(
+      "Bearer new-access-token",
+    );
+  });
+
+  it("uses the latest access token for each request", async () => {
+    localStorage.setItem(
+      "rentnest_access_token",
+      "first-access-token",
+    );
+
+    const { interceptor } = await loadClient("");
+
+    const firstRequest = interceptor({ headers: {} });
+
+    localStorage.setItem(
+      "rentnest_access_token",
+      "second-access-token",
+    );
+
+    const secondRequest = interceptor({ headers: {} });
+
+    expect(firstRequest.headers.Authorization).toBe(
+      "Bearer first-access-token",
+    );
+    expect(secondRequest.headers.Authorization).toBe(
+      "Bearer second-access-token",
+    );
   });
 
   it("preserves other request configuration values", async () => {
@@ -135,6 +192,17 @@ describe("API client configuration", () => {
     expect(result.headers.Authorization).toBe(
       "Bearer test-access-token",
     );
+  });
+
+  it("returns the original request config object", async () => {
+    const { interceptor } = await loadClient("");
+
+    const requestConfig = {
+      url: "/dashboard/",
+      headers: {},
+    };
+
+    expect(interceptor(requestConfig)).toBe(requestConfig);
   });
 
   it("rejects request interceptor errors", async () => {
