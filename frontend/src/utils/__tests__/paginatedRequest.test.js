@@ -1,3 +1,4 @@
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import apiClient from "../../api/client";
 import { fetchAllPages } from "../paginatedRequest";
@@ -20,6 +21,17 @@ describe("fetchAllPages", () => {
 
     expect(apiClient.get).not.toHaveBeenCalled();
   });
+
+  it.each([null, undefined, 123, {}, []])(
+    "rejects a non-string endpoint: %s",
+    async (url) => {
+      await expect(fetchAllPages(url)).rejects.toThrow(
+        "A valid API endpoint URL is required.",
+      );
+
+      expect(apiClient.get).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns an unpaginated array response", async () => {
     apiClient.get.mockResolvedValueOnce({
@@ -128,6 +140,40 @@ describe("fetchAllPages", () => {
     );
   });
 
+  it("rejects a response whose results field is not an array", async () => {
+    apiClient.get.mockResolvedValueOnce({
+      data: {
+        next: null,
+        results: { id: 1 },
+      },
+    });
+
+    await expect(fetchAllPages("/properties/")).rejects.toThrow(
+      "Unexpected API response: expected an array or paginated results.",
+    );
+  });
+
+  it("returns accumulated results when a later page is an unpaginated array", async () => {
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          next: "/properties/?page=2",
+          results: [{ id: 1 }],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 2 }, { id: 3 }],
+      });
+
+    await expect(fetchAllPages("/properties/")).resolves.toEqual([
+      { id: 1 },
+      { id: 2 },
+      { id: 3 },
+    ]);
+
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects an invalid pagination URL", async () => {
     apiClient.get.mockResolvedValueOnce({
       data: {
@@ -163,5 +209,22 @@ describe("fetchAllPages", () => {
     await expect(fetchAllPages("/properties/")).rejects.toThrow(
       "Network error",
     );
+  });
+
+  it("propagates errors from a later page", async () => {
+    const error = new Error("Second page request failed");
+
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          next: "/properties/?page=2",
+          results: [{ id: 1 }],
+        },
+      })
+      .mockRejectedValueOnce(error);
+
+    await expect(fetchAllPages("/properties/")).rejects.toBe(error);
+
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
   });
 });
